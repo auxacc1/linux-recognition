@@ -1,0 +1,2 @@
+SELECT identifier
+FROM licenses

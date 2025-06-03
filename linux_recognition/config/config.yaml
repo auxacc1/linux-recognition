@@ -1,0 +1,29 @@
+database:
+  recognized_db: recognized
+  packages_db: packages
+  repology_db: repology
+  postgres_default:
+    user: postgres
+    host: localhost
+    port: 5432
+  postgres_udd:
+    dbname: udd
+    user: udd-mirror
+    password: udd-mirror
+    host: udd-mirror.debian.net
+    port: 5432
+logging:
+  log_to_console: true
+  file_handler:
+    use: true
+    filename: log.json
+  level: DEBUG
+  attributes:
+    include_time: true
+    other:
+      - levelname
+      - name
+      - funcName
+openai:
+  chat: gpt-4o-mini
+  embeddings: text-embedding-3-large
