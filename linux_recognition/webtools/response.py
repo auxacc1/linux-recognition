@@ -95,7 +95,7 @@ class Response(ABC):
         return message, extra
 
 
-class BytesResponse(Response):
+class BinaryResponse(Response):
 
     def __init__(
             self,
@@ -121,7 +121,6 @@ class BytesResponse(Response):
 
     def get_content(self) -> bytes | None:
         return self._content
-
 
     async def _fetch(self) -> ClientResponse:
         async with self._session.get(
@@ -172,6 +171,7 @@ class JsonResponse(Response):
             self._url = response.url
             self._content = await response.json()
             return response
+
 
 class TextResponse(Response):
 

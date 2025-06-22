@@ -14,7 +14,6 @@ from urllib.parse import quote, urljoin, urlparse, ParseResult
 from xml.etree.ElementTree import Element
 
 from log_management import get_error_details
-from reposcan.dateparse import parse_date
 from reposcan.packages import FedoraPackage, LinuxPackage
 from reposcan.projects_base import GitProject, Project
 from synchronization import async_to_thread
@@ -241,7 +240,6 @@ class GitHubProject(GitProject):
         }
         custom_parameters.update(**kwargs)
         return await super()._fetch_text_response(url, **custom_parameters)
-
 
 
 class GitLabProject(GitProject):
@@ -916,17 +914,7 @@ class SourceForgeProject(Project):
         if self._version_info is None:
             return Release()
         rss_url = f'{self._base_url}projects/{self._project_name}/rss?limit=999999'
-        matching_items: list[ReleaseInfo] = []
-        matched_item = await self._search_rss_feed(rss_url, matching_items)
-        if matched_item is None:
-            if not matching_items:
-                return Release(self._version_with_suffix)
-            matched_item = self._get_best_match(matching_items)
-        date_patterns = self._recognition_context.date_patterns
-        date = parse_date(matched_item.date_info, patterns=date_patterns)
-        if date is None:
-            return Release(self._version_with_suffix)
-        return Release(self._version_with_suffix, date.iso_format())
+        return await self._fetch_release_from_rss(rss_url)
 
     def _scan_element(self, element: Element, partial_matches: list[ReleaseInfo]) -> ReleaseInfo | None:
         general_pattern = self._version_info.pattern.general
@@ -951,6 +939,7 @@ class SourceForgeProject(Project):
                 release_item = ReleaseInfo(match=match, date_info=date_info, tail=tail)
                 partial_matches.append(release_item)
                 return None
+        return None
 
     async def _load_project_info(self) -> None:
         if not self._project_name:
@@ -1071,17 +1060,7 @@ class PyPIProject(Project):
         if isinstance(release, Release):
             return release
         rss_url = f'{self._base_url}rss/project/{self._project_name}/releases.xml'
-        matching_items = []
-        matched_item = await self._search_rss_feed(rss_url, matching_items)
-        if matched_item is None:
-            if not matching_items:
-                return Release(self._version_with_suffix)
-            matched_item = self._get_best_match(matching_items)
-        date_patterns = self._recognition_context.date_patterns
-        date = parse_date(matched_item.date_info, patterns=date_patterns)
-        if date is None:
-            return Release(self._version_with_suffix)
-        return Release(self._version_with_suffix, date.iso_format())
+        return await self._fetch_release_from_rss(rss_url)
 
     async def _load_project_info(self) -> None:
         try:
@@ -1123,6 +1102,7 @@ class PyPIProject(Project):
             iso_date = fetch(file, 'upload_time', output_type=str).strip()
             if iso_date:
                 return Release(self._version_with_suffix, iso_date[:10])
+        return None
 
     async def _fetch_json_response(self, url, **kwargs) -> JsonResponse:
         custom_parameters = {

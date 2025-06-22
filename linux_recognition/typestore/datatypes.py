@@ -6,42 +6,12 @@ from asyncio import Lock, Semaphore
 from calendar import monthrange
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import NamedTuple, Protocol, TypedDict, runtime_checkable
+from typing import NamedTuple, Protocol, TypedDict, runtime_checkable, Self
 
 from aiohttp import ClientSession
 from anyio import Path
 from asyncpg import Pool
-
-
-@runtime_checkable
-class Package(Protocol):
-
-    async def initialize(self) -> Package: ...
-
-    def get_name(self) -> str: ...
-
-    def get_package_url(self) -> str: ...
-
-    def get_vendor(self) -> str: ...
-
-    def get_homepage(self) -> str: ...
-
-    def get_description(self) -> str: ...
-
-    def get_license_info(self) -> LicenseInfo: ...
-
-
-@dataclass(frozen=True)
-class PackageTools:
-    classes: list[Package]
-    family: str
-
-    @property
-    def dict_repr(self):
-        return {
-            'classes': [cls.__name__ for cls in self.classes],
-            'family': self.family
-        }
+from jinja2 import Environment
 
 
 class AlpinePackageTuple(NamedTuple):
@@ -58,7 +28,7 @@ class Date:
     month: int
     day: int
 
-    def check_day_in_month(self) -> Date | None:
+    def check_day_in_month(self) -> Self | None:
         if self.year is None:
             return self
         if self.day > monthrange(self.year, self.month)[1]:
@@ -70,7 +40,7 @@ class Date:
             return f'{self.month:02d}-{self.day:02d}'
         return f'{self.year}-{self.month:02d}-{self.day:02d}'
 
-    def is_close_to(self, date_obj: Date) -> bool:
+    def is_close_to(self, date_obj: Self) -> bool:
         if date_obj is None or not all((getattr(self, p) == getattr(date_obj, p) for p in ['year', 'month'])):
             return False
         return True
@@ -375,12 +345,45 @@ class RecognitionContext(NamedTuple):
     session_handler: SessionHandler
     recognized_db_pool: Pool
     source_db_pools: SourceDbPools
+    jinja_environment: Environment
     llm_interaction: LlmInteraction
     license_resolver: LicenseResolver
     is_host_supported: Callable[[str], bool]
     date_patterns: DatePatterns
     library_patterns: LibraryPatterns
     synchronization: SynchronizationPrimitives
+
+
+@runtime_checkable
+class Package(Protocol):
+
+    async def initialize(self) -> Self: ...
+
+    def get_name(self) -> str: ...
+
+    def get_package_url(self) -> str: ...
+
+    def get_vendor(self) -> str: ...
+
+    def get_homepage(self) -> str: ...
+
+    def get_description(self) -> str: ...
+
+    def get_license_info(self) -> LicenseInfo: ...
+
+
+@dataclass(frozen=True)
+class PackageTools:
+    classes: list[Package]
+    family: str
+
+    @property
+    def dict_repr(self):
+        return {
+            'classes': [cls.__name__ for cls in self.classes],
+            'family': self.family
+        }
+
 
 
 class RecognitionResult(NamedTuple):

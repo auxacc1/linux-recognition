@@ -1,3 +1,6 @@
+SET search_path to public;
+
+
 CREATE INDEX idx_pack_info_package_family ON packages_info(package, family);
 
 

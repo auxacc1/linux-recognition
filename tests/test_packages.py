@@ -147,13 +147,16 @@ output = {
         'name': ['protobuf'],
         'vendor': ['CentOS'],
         'description': [
-            "Library for extensible, efficient structure packing, Library for extensible, "
-            "efficient structure packing (debug symbols), Library for extensible, efficient structure "
-            "packing (development files), Python bindings to Google's data interchange format, Ruby "
-            "bindings to Google's data interchange format, Vim syntax for protobuf"
-        ],
+            "Protocol Buffers - Google's data interchange format",
+            "Google's language-neutral, platform-neutral, extensible mechanism for serializing structured data, "
+            "Protocol Buffers - Google's data interchange format, Python bindings to Google Protocol Buffers",
+            "Protocol Buffers - Google's data interchange format",
+            "Protocol Buffers - Google's data interchange format, Protocol Buffers - Google's data interchange format "
+            "(development files), Protocol Buffers - Google's data interchange format (Python bindings), "
+            "Protocol buffers - Google's data interchange format, development files., "
+            "Protocol buffers - Google's data interchange format."],
         'licenses': [
-            {'BSD-3-Clause',},
+            {'Apache License 2.0', 'BSD-3-Clause'}, {'BSD'},
         ]
     }
 }
@@ -169,7 +172,7 @@ async def samples(request) -> dict[str, dict]:
 class TestPackage:
 
     @pytest.fixture(scope='class')
-    async def package(self, recognition_context: RecognitionContext, samples: dict):
+    async def package(self, recognition_context: RecognitionContext, samples: dict) -> LinuxPackage:
         init_data = samples['init']
         package_class: type[LinuxPackage] = init_data['class']
         package_instance = package_class(
@@ -181,37 +184,37 @@ class TestPackage:
         await package_instance.initialize()
         return package_instance
 
-    def test_get_homepage(self, package: LinuxPackage, samples: dict):
+    def test_get_homepage(self, package: LinuxPackage, samples: dict) -> None:
         expected_output = samples['output']
         homepage = package.get_homepage()
         assert isinstance(homepage, str)
         assert homepage in expected_output['homepage']
 
-    def test_get_source_package_url(self, package: LinuxPackage, samples: dict):
+    def test_get_source_package_url(self, package: LinuxPackage, samples: dict) -> None:
         expected_output = samples['output']
         source_package_url = package.get_package_url()
         assert isinstance(source_package_url, str)
         assert source_package_url in expected_output['package_url']
 
-    def test_get_name(self, package: LinuxPackage, samples: dict):
+    def test_get_name(self, package: LinuxPackage, samples: dict) -> None:
         expected_output = samples['output']
         name = package.get_name()
         assert isinstance(name, str)
         assert name in expected_output['name']
 
-    def test_get_vendor(self, package: LinuxPackage, samples: dict):
+    def test_get_vendor(self, package: LinuxPackage, samples: dict) -> None:
         expected_output = samples['output']
         vendor = package.get_vendor()
         assert isinstance(vendor, str)
         assert vendor in expected_output['vendor']
 
-    def test_get_description(self, package: LinuxPackage, samples: dict):
+    def test_get_description(self, package: LinuxPackage, samples: dict) -> None:
         expected_output = samples['output']
         description = package.get_description()
         assert isinstance(description, str)
         assert description in expected_output['description']
 
-    def test_get_license_info(self, package: LinuxPackage, samples: dict):
+    def test_get_license_info(self, package: LinuxPackage, samples: dict) -> None:
         expected_output = samples['output']
         license_info = package.get_license_info()
         assert isinstance(license_info, LicenseInfo)

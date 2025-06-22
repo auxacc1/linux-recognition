@@ -119,29 +119,30 @@ def extract_date_like(
         parsed = ParsedDateLike(year, month, day)
         return DateLikeParse(parsed=parsed, ordered=True, match=date_like_match)
     date_like_match = date_patterns.no_separator.search(text)
-    if date_like_match is not None:
-        group_dict = date_like_match.groupdict()
-        matched_groups = [key for key in group_dict if group_dict[key]]
-        if matched_groups:
-            parsed = ParsedDateLike(
-                *[next(int(group_dict[name])
-                       for name in matched_groups if name.startswith(p)) for p in ['year', 'month', 'day']]
-            )
-            return DateLikeParse(parsed=parsed, ordered=True, match=date_like_match)
-        matched = date_like_match.group()
-        non_year_count = 2 if len(matched) == 8 else 1
-        if 1900 < int(matched[-4:]) < 2100:
-            year = int(matched[-4:])
-            non_year = (int(matched[0 + 2 * j:2 + 2 * j]) for j in range(non_year_count))
-            parsed = ParsedDateLike(year, *non_year)
-        elif 1900 < int(matched[:4]) < 2100:
-            year = int(matched[:4])
-            non_year = (int(matched[4:][0 + 2 * j:2 + 2 * j]) for j in range(non_year_count))
-            parsed = ParsedDateLike(year, *non_year)
-        else:
-            return None
-        ordered = False if non_year_count == 2 else True
-        return DateLikeParse(parsed=parsed, ordered=ordered, match=date_like_match)
+    if date_like_match is None:
+        return None
+    group_dict = date_like_match.groupdict()
+    matched_groups = [key for key in group_dict if group_dict[key]]
+    if matched_groups:
+        parsed = ParsedDateLike(
+            *[next(int(group_dict[name])
+                   for name in matched_groups if name.startswith(p)) for p in ['year', 'month', 'day']]
+        )
+        return DateLikeParse(parsed=parsed, ordered=True, match=date_like_match)
+    matched = date_like_match.group()
+    non_year_count = 2 if len(matched) == 8 else 1
+    if 1900 < int(matched[-4:]) < 2100:
+        year = int(matched[-4:])
+        non_year = (int(matched[0 + 2 * j:2 + 2 * j]) for j in range(non_year_count))
+        parsed = ParsedDateLike(year, *non_year)
+    elif 1900 < int(matched[:4]) < 2100:
+        year = int(matched[:4])
+        non_year = (int(matched[4:][0 + 2 * j:2 + 2 * j]) for j in range(non_year_count))
+        parsed = ParsedDateLike(year, *non_year)
+    else:
+        return None
+    ordered = False if non_year_count == 2 else True
+    return DateLikeParse(parsed=parsed, ordered=ordered, match=date_like_match)
 
 
 def generate_complete_date_patterns() -> DatePatternsComplete:
@@ -237,6 +238,7 @@ def _parse_no_year_date(
         if not 1 <= month <= 12 or day > monthrange(2000, month)[1]:
             return None
         return Date(parsed[0], month, day)
+    return None
 
 
 def _extract_no_year_date_like(text: str, patterns: DatePatternsNoYear) -> DateLikeParse | None:
@@ -268,7 +270,7 @@ def _get_replacement(pattern: str, substring: str, index: int, word_month: bool 
         return pattern.replace(substring, replacements[substring])
     replacements = {
         'P<year_>': f'P<year_{index}>',
-        'P<non_year_>':  [f'P<non_year_{p}_{index}>'for p in {'a', 'b'}]
+        'P<non_year_>': [f'P<non_year_{p}_{index}>' for p in {'a', 'b'}]
     }
     match substring:
         case 'P<non_year_>':
@@ -276,3 +278,4 @@ def _get_replacement(pattern: str, substring: str, index: int, word_month: bool 
                 substring, replacements[substring][1], 1)
         case 'P<year_>':
             return pattern.replace(substring, replacements[substring])
+    return pattern

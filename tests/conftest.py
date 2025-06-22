@@ -3,8 +3,9 @@ from logging import getLogger
 import pytest
 from pytest_asyncio import is_async_test
 
-from configuration import get_project_directory, initialize_settings, is_initialized
+from configuration import get_project_directory, initialize_settings
 from context import managed_context, prepare_context
+from initialization import is_initialized
 from typestore.errors import ProjectNotInitializedError
 
 

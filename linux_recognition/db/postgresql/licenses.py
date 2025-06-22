@@ -1,8 +1,10 @@
 import json
+from asyncio import Semaphore
 from logging import DEBUG, getLogger
 
 from anyio import Path
 from asyncpg import Connection, Pool, Record
+from jinja2 import Environment
 
 from db.postgresql.core import query_db
 from log_management import get_error_details
@@ -13,31 +15,37 @@ from typestore.errors import DatabaseError, SQLTemplateError
 logger = getLogger(__name__)
 
 
-async def fetch_licenses(pool: Pool, project_directory: Path, identifiers: list[str]) -> list[LicenseItem]:
+async def fetch_licenses(
+        pool: Pool,
+        environment: Environment,
+        identifiers: list[str],
+        semaphore: Semaphore
+) -> list[LicenseItem]:
 
     async def query_fn(connection: Connection, query: str) -> list[Record]:
         identifiers_tuples = [(identifier,) for identifier in identifiers]
         return await connection.fetchmany(query, identifiers_tuples)
 
     query_file = 'packages_get_license.sql'
-    results = await query_db(pool, query_fn, query_file, project_directory)
+    results = await query_db(pool, environment, query_fn, query_file, semaphore=semaphore)
     items = [LicenseItem(result['identifier'], result['name'], result['osi_approved']) for result in results]
     return items
 
 
-async def fetch_identifiers(pool: Pool, project_directory: Path) -> list[str]:
+async def fetch_identifiers(pool: Pool, environment: Environment, semaphore: Semaphore) -> list[str]:
 
     async def query_fn(connection: Connection, query: str) -> list[Record]:
         return await connection.fetch(query)
 
     query_file = 'packages_get_license_identifier.sql'
-    records = await query_db(pool, query_fn, query_file, project_directory)
+    records = await query_db(pool, environment, query_fn, query_file, semaphore)
     return [record['identifier'] for record in records]
 
 
 async def insert_licenses(
         pool: Pool,
-        project_directory: Path,
+        environment: Environment,
+        semaphore: Semaphore,
         identifiers: list[str] | None = None,
         items: list[tuple[str, str, bool | None]] | None = None
 ) -> None:
@@ -53,7 +61,7 @@ async def insert_licenses(
 
     query_file = 'packages_insert_licenses.sql'
     try:
-        await query_db(pool, query_fn, query_file, project_directory)
+        await query_db(pool, environment, query_fn, query_file, semaphore)
     except (DatabaseError, SQLTemplateError):
         extra = {}
         if identifiers:
@@ -68,20 +76,29 @@ async def insert_licenses(
     })
 
 
-async def create_licenses_table(pool: Pool, project_directory: Path) -> None:
+async def create_licenses_table(pool: Pool, environment: Environment, semaphore: Semaphore) -> None:
 
     async def query_fn(connection: Connection, query: str) -> str:
         return await connection.execute(query)
 
     query_file = 'packages_create_licenses.sql'
-    await query_db(pool, query_fn, query_file, project_directory)
+    await query_db(pool,environment, query_fn, query_file, semaphore)
     logger.info('Successful creation of a table', extra={
         'database': 'packages',
         'table_name': 'licenses'
     })
 
 
-async def populate_licenses_table(pool: Pool, project_directory: Path) -> None:
+async def populate_licenses_table(
+        pool: Pool,
+        environment: Environment,
+        project_directory: Path,
+        semaphore: Semaphore
+) -> None:
+    logger.info('Population of a table started', extra={
+        'database': 'packages',
+        'table_name': 'licenses'
+    })
     spdx_licenses_file = 'licenses.json'
     try:
         licenses_data = await _load_licenses_data(project_directory, spdx_licenses_file)
@@ -96,8 +113,8 @@ async def populate_licenses_table(pool: Pool, project_directory: Path) -> None:
         return await connection.executemany(query, licenses_data)
 
     query_file = 'packages_insert_licenses.sql'
-    await query_db(pool, query_fn, query_file, project_directory)
-    logger.info('Successful populating of a table', extra={
+    await query_db(pool, environment, query_fn, query_file, semaphore)
+    logger.info('Successful population of a table', extra={
         'database': 'packages',
         'table_name': 'licenses'
     })

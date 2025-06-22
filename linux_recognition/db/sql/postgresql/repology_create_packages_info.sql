@@ -1,3 +1,6 @@
+SET search_path TO public;
+
+
 CREATE TABLE packages_info (
     id SERIAL PRIMARY KEY,
 	package TEXT,
@@ -36,5 +39,5 @@ SELECT
     upstream_url,
     project_url,
     package_url
-FROM src_packages_info
+FROM seed_packages_info
 ORDER BY package, projectname_seed, family, version;

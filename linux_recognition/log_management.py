@@ -1,12 +1,10 @@
-from __future__ import annotations
-
 import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from logging.handlers import QueueHandler, QueueListener
 from queue import Queue
-from typing import Any
+from typing import Any, Self
 
 import json_log_formatter
 from anyio import Path
@@ -51,7 +49,7 @@ class CustomizedListener(QueueListener):
         super().__init__(queue, *handlers, **kwargs)
 
     @contextmanager
-    def started(self) -> Generator[CustomizedListener, None, None]:
+    def started(self) -> Generator[Self, None, None]:
         self.start()
         try:
             yield self

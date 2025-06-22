@@ -11,4 +11,4 @@ WHERE package = $1
         homepage IS NOT NULL OR
         project_url IS NOT NULL OR
         package_url IS NOT NULL
-    )
+    );

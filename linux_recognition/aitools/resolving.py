@@ -1,9 +1,10 @@
+from asyncio import Semaphore
 from logging import DEBUG, getLogger
 from os import getenv
 from textwrap import dedent
 
-from anyio import Path
 from asyncpg import Pool
+from jinja2 import Environment
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -43,20 +44,7 @@ class ChatInteraction:
         class FormalDefinition(BaseModel):
             description: str = Field(description=f'A formal definition of {software}')
 
-        llm = self._llm.with_structured_output(FormalDefinition)
-        llm_chain = prompt_template | llm
-        try:
-            response = await llm_chain.ainvoke(
-                {
-                    'text': text,
-                    'software': software
-                }
-            )
-        except Exception as e:
-            message = 'LLM interaction error'
-            extra = get_error_details(e)
-            logger.error(message, exc_info=logger.isEnabledFor(DEBUG), extra=extra)
-            raise LLMError(message) from e
+        response = await self._get_structured_response(text, software, prompt_template, FormalDefinition)
         return response.description
 
     async def extract_licenses(self, text: str, software: str) -> list[str]:
@@ -77,7 +65,17 @@ class ChatInteraction:
         class LicenseExtractionResponse(BaseModel):
             licenses: list[str] = Field(description='A list of license names identified from the text')
 
-        llm = self._llm.with_structured_output(LicenseExtractionResponse)
+        response = await self._get_structured_response(text, software, prompt_template, LicenseExtractionResponse)
+        return response.licenses
+
+    async def _get_structured_response[T: BaseModel](
+            self,
+            text: str,
+            software: str,
+            prompt_template: ChatPromptTemplate,
+            response_model: type[T]
+    ) -> T:
+        llm = self._llm.with_structured_output(response_model)
         llm_chain = prompt_template | llm
         try:
             response = await llm_chain.ainvoke(
@@ -91,7 +89,7 @@ class ChatInteraction:
             extra = get_error_details(e)
             logger.error(message, exc_info=logger.isEnabledFor(DEBUG), extra=extra)
             raise LLMError(message) from e
-        return response.licenses
+        return response
 
 
 class FaissLicenseResolver:
@@ -99,18 +97,20 @@ class FaissLicenseResolver:
     def __init__(
             self,
             pool: Pool,
-            project_directory: Path,
+            environment: Environment,
             embeddings_model: str,
+            semaphore: Semaphore,
             l2_threshold: float = 0.2
     ) -> None:
         self._pool: Pool = pool
-        self._project_directory: Path = project_directory
+        self._jinja_environment: Environment = environment
+        self._semaphore: Semaphore = semaphore
         self._embeddings_model: str = embeddings_model
         self._l2_threshold: float = l2_threshold
         self._faiss: FAISS | None = None
 
     async def create_vectorstore(self) -> None:
-        identifiers = await fetch_identifiers(self._pool, self._project_directory)
+        identifiers = await fetch_identifiers(self._pool, self._jinja_environment, self._semaphore)
         embedding = OpenAIEmbeddings(
             model=self._embeddings_model,
             api_key=getenv('LINUX_RECOGNITION__OPENAI_API_KEY')
@@ -133,12 +133,12 @@ class FaissLicenseResolver:
             logger.error(message, exc_info=logger.isEnabledFor(DEBUG), extra=extra)
             raise LLMError(message) from e
         recognized_items = await fetch_licenses(
-            self._pool, self._project_directory, identifiers_by_recognition.recognized
+            self._pool, self._jinja_environment, identifiers_by_recognition.recognized, self._semaphore
         )
         if identifiers_by_recognition.unrecognized:
             try:
                 await insert_licenses(
-                    self._pool, self._project_directory, identifiers_by_recognition.unrecognized
+                    self._pool, self._jinja_environment, self._semaphore, identifiers_by_recognition.unrecognized
                 )
             except (DatabaseError, SQLTemplateError):
                 pass

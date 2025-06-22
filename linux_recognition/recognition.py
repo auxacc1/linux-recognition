@@ -3,11 +3,12 @@ from itertools import batched
 from logging import DEBUG, Logger
 from uuid import uuid4
 
-from configuration import get_project_directory, initialize_settings, is_initialized
+from configuration import get_project_directory, initialize_settings
 from context import managed_context, prepare_context
 from db.postgresql.output import filter_recognized_fingerprints, update_recognized_table
 from log_management import get_error_details, init_logging
 from normalization import normalize_fingerprints
+from initialization import is_initialized
 from software import SoftwareRecognizer
 from typestore.datatypes import (
     Fingerprint,
@@ -46,9 +47,11 @@ async def recognize(raw_fingerprints: list[FingerprintDict], segment_length: int
             normalization_patterns = VersionNormalizationPatterns()
             fingerprints = normalize_fingerprints(raw_fingerprints, normalization_patterns)
             recognized_db_pool = recognition_context.recognized_db_pool
+            jinja_environment = recognition_context.jinja_environment
+            semaphore = recognition_context.synchronization.semaphore
             try:
                 fingerprints = await filter_recognized_fingerprints(
-                    recognized_db_pool, project_directory, fingerprints
+                    recognized_db_pool, jinja_environment, fingerprints, semaphore
                 )
             except (DatabaseError, SQLTemplateError):
                 message = 'Failed to filter out fingerprints'
@@ -74,9 +77,10 @@ async def _recognize_segment(
     results = [item for item in segment_outcome if item is not None]
     if results:
         output_db_pool = recognition_context.recognized_db_pool
-        project_directory = recognition_context.project_directory
+        jinja_environment = recognition_context.jinja_environment
+        semaphore = recognition_context.synchronization.semaphore
         try:
-            await update_recognized_table(output_db_pool, project_directory, results)
+            await update_recognized_table(output_db_pool, jinja_environment, results, semaphore)
         except (DatabaseError, SQLTemplateError):
             logger.critical(
                 'Database upsert failed for the current batch, subsequent batches will likely fail'

@@ -1,4 +1,5 @@
 import re
+from asyncio import Semaphore
 from collections.abc import Generator
 from logging import DEBUG, getLogger
 from xml.etree.ElementTree import Element
@@ -7,6 +8,7 @@ from zipfile import ZipFile
 from anyio import Path
 from asyncpg import Pool, Connection, Record
 from defusedxml.ElementTree import iterparse
+from jinja2 import Environment
 
 from db.postgresql.core import query_db
 from log_management import get_error_details
@@ -18,38 +20,58 @@ logger = getLogger(__name__)
 
 async def get_cpe_entities(
         pool: Pool,
-        project_directory: Path,
-        product_names: list[str]
+        environment: Environment,
+        product_names: list[str],
+        semaphore: Semaphore
 ) -> list[tuple[str, str, str]]:
 
     async def query_fn(connection: Connection, query: str) -> list[Record]:
         return await connection.fetch(query, tuple(product_names))
 
     query_file = 'packages_get_cpe_entities.sql'
-    records = await query_db(pool, query_fn, query_file, project_directory)
+    records = await query_db(pool, environment, query_fn, query_file, semaphore=semaphore)
     return [(record['publisher'], record['product'], record['version']) for record in records]
 
 
-async def create_cpe_entities(pool: Pool, project_directory: Path) -> None:
+async def create_cpe_entities(
+        pool: Pool,
+        environment: Environment,
+        semaphore: Semaphore
+) -> None:
 
     async def query_fn(connection: Connection, query: str) -> None:
         await connection.execute(query)
 
     query_file = 'packages_create_cpe_entities.sql'
-    await query_db(pool, query_fn, query_file, project_directory)
+    await query_db(pool, environment, query_fn, query_file, semaphore=semaphore)
 
 
-async def create_product_index(pool: Pool, project_directory: Path) -> None:
+async def create_product_index(
+        pool: Pool,
+        environment: Environment,
+        semaphore: Semaphore
+) -> None:
 
     async def query_fn(connection: Connection, query: str) -> None:
         await connection.execute(query)
 
     query_file = 'packages_create_index_on_cpe_entities.sql'
-    await query_db(pool, query_fn, query_file, project_directory)
+    await query_db(pool, environment, query_fn, query_file, semaphore=semaphore)
 
 
-async def populate_cpe_entities(pool: Pool, project_directory: Path, batch_size: int = 100000) -> None:
+async def populate_cpe_entities(
+        pool: Pool,
+        environment: Environment,
+        project_directory: Path,
+        semaphore: Semaphore,
+        batch_size: int = 100000
+) -> None:
     # currently it is blocking function
+    logger.info('Population of a table started', extra={
+        'database': 'packages',
+        'table_name': 'cpe_entities'
+    })
+
     cpe_dictionary_file = 'cpe_dictionary.xml'
     cpe_dictionary_archive = f'{cpe_dictionary_file}.zip'
     downloads_directory = project_directory / 'data' / 'downloaded'
@@ -63,23 +85,27 @@ async def populate_cpe_entities(pool: Pool, project_directory: Path, batch_size:
         entities_batch.append(entity)
         if len(entities_batch) <= batch_size:
             continue
-        await _insert_entities_batch(pool, project_directory, entities_batch)
+        await _insert_entities_batch(pool, environment, entities_batch, semaphore)
         entities_batch = []
     if entities_batch:
-        await _insert_entities_batch(pool, project_directory, entities_batch)
-
+        await _insert_entities_batch(pool, environment, entities_batch, semaphore)
+    logger.info('Successful population of a table', extra={
+        'database': 'packages',
+        'table_name': 'cpe_entities'
+    })
 
 async def _insert_entities_batch(
         pool: Pool,
-        project_directory: Path,
-        cpe_entities: list[tuple[str, str, str]]
+        environment: Environment,
+        cpe_entities: list[tuple[str, str, str]],
+        semaphore: Semaphore
 ) -> None:
 
     async def query_fn(connection: Connection, query: str) -> None:
         await connection.executemany(query, cpe_entities)
 
     query_file = 'packages_insert_cpe_entities.sql'
-    await query_db(pool, query_fn, query_file, project_directory)
+    await query_db(pool, environment, query_fn, query_file, semaphore=semaphore)
 
 
 def _search_for_cpe_entities(file_path: Path) -> Generator[tuple[str, str, str], None, None]:

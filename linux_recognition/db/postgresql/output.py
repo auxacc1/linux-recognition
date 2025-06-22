@@ -1,7 +1,8 @@
+from asyncio import Semaphore
 from logging import getLogger
 
-from anyio import Path
 from asyncpg import Connection, Pool
+from jinja2 import Environment
 
 from db.postgresql.core import query_db
 from normalization import Fingerprint
@@ -14,8 +15,9 @@ logger = getLogger(__name__)
 
 async def filter_recognized_fingerprints(
         pool: Pool,
-        project_directory: Path,
-        fingerprints: list[Fingerprint]
+        environment: Environment,
+        fingerprints: list[Fingerprint],
+        semaphore: Semaphore
 ) -> list[Fingerprint]:
 
     async def query_fn(connection: Connection, query: str) -> list[Fingerprint]:
@@ -28,7 +30,7 @@ async def filter_recognized_fingerprints(
 
     query_file = 'recognized_get_fingerprint.sql'
     try:
-        return await query_db(pool, query_fn, query_file, project_directory)
+        return await query_db(pool, environment, query_fn, query_file, semaphore)
     except (DatabaseError, SQLTemplateError):
         message = 'Failed to filter out recognized fingerprints'
         extra = {
@@ -41,8 +43,9 @@ async def filter_recognized_fingerprints(
 
 async def update_recognized_table(
         pool: Pool,
-        project_directory: Path,
-        recognition_results: list[RecognitionResult]
+        environment: Environment,
+        recognition_results: list[RecognitionResult],
+        semaphore: Semaphore
 ) -> None:
     if not recognition_results:
         return
@@ -71,7 +74,7 @@ async def update_recognized_table(
     fingerprints = [repr(result.fingerprint) for result in recognition_results]
     dbname, table_name = 'recognized', 'software_info'
     try:
-        await query_db(pool, _update_recognized_table, query_file, project_directory)
+        await query_db(pool, environment, _update_recognized_table, query_file, semaphore)
     except (DatabaseError, SQLTemplateError):
         message ='Insert error'
         logger.error(message, extra={
@@ -86,7 +89,11 @@ async def update_recognized_table(
     })
 
 
-async def create_output_table(pool: Pool, project_directory: Path) -> None:
+async def create_output_table(
+        pool: Pool,
+        environment: Environment,
+        semaphore: Semaphore
+) -> None:
 
     async def query_fn(connection: Connection, query: str) -> str:
         return await connection.execute(query)
@@ -94,12 +101,7 @@ async def create_output_table(pool: Pool, project_directory: Path) -> None:
     query_file = 'recognized_create_software_info.sql'
     dbname, table_name = 'recognized', 'software_info'
     try:
-        await query_db(
-            pool,
-            query_fn,
-            query_file,
-            project_directory
-        )
+        await query_db(pool, environment, query_fn, query_file, semaphore)
     except (DatabaseError, SQLTemplateError):
         message = 'Table creation failed'
         logger.error(message, extra={

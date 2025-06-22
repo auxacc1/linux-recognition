@@ -1,8 +1,8 @@
-from asyncio import Lock
+from asyncio import Lock, Semaphore
 from logging import getLogger
 
-from anyio import Path
 from asyncpg import Connection, Pool, Record
+from jinja2 import Environment
 
 from db.postgresql.core import query_db
 from typestore.errors import DatabaseError, SQLTemplateError
@@ -17,14 +17,16 @@ class UDD:
             self,
             raw_package_name,
             pool: Pool,
-            project_directory: Path,
+            environment: Environment,
+            semaphore: Semaphore,
             udd_lock: Lock = Lock(),
             packages_table='all_packages',
             sources_table='all_sources',
     ):
         self._raw_package_name = raw_package_name
         self._pool = pool
-        self._project_directory = project_directory
+        self._environment = environment
+        self._semaphore = semaphore
         self._udd_lock = udd_lock
         self._packages_table = packages_table
         self._sources_table = sources_table
@@ -48,9 +50,10 @@ class UDD:
             async with self._udd_lock:
                 record = await query_db(
                     self._pool,
+                    self._environment,
                     query_fn,
                     query_file,
-                    self._project_directory,
+                    self._semaphore,
                     table_name=self._sources_table
                 )
         except (DatabaseError, SQLTemplateError):
@@ -83,9 +86,10 @@ class UDD:
         try:
             record = await query_db(
                 self._pool,
+                self._environment,
                 query_fn,
                 query_file,
-                self._project_directory,
+                self._semaphore,
                 table_name=self._packages_table
             )
         except (DatabaseError, SQLTemplateError):

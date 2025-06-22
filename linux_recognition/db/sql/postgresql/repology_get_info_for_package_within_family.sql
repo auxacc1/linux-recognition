@@ -8,4 +8,4 @@ SELECT
     version
 FROM packages_info p
 WHERE family = $1
-    AND package = $2
+    AND package = $2;

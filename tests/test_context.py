@@ -18,7 +18,7 @@ from typestore.datatypes import (
 
 
 @pytest.mark.asyncio
-async def test_prepare_context():
+async def test_prepare_context() -> None:
     project_directory = await get_project_directory()
     settings = initialize_settings(project_directory)
     context = await prepare_context(
@@ -28,7 +28,7 @@ async def test_prepare_context():
         assert isinstance(recognition_ctx, RecognitionContext)
         assert isinstance(recognition_ctx.project_directory, Path)
         assert isinstance(recognition_ctx.session_handler, SessionHandler)
-        assert isinstance(recognition_ctx.output_db_pool, Pool)
+        assert isinstance(recognition_ctx.recognized_db_pool, Pool)
         assert isinstance(recognition_ctx.source_db_pools, SourceDbPools)
         for pool in recognition_ctx.source_db_pools:
             assert isinstance(pool, Pool)

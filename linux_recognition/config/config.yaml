@@ -1,7 +1,8 @@
 database:
-  recognized_db: recognized
-  packages_db: packages
-  repology_db: repology
+  core_databases:
+    recognized: recognized
+    packages: packages
+    repology: repology
   postgres_default:
     user: postgres
     host: localhost
@@ -12,6 +13,7 @@ database:
     password: udd-mirror
     host: udd-mirror.debian.net
     port: 5432
+  psql_directory: null
 logging:
   log_to_console: true
   file_handler:

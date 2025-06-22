@@ -8,10 +8,29 @@ import aiofile
 from log_management import get_error_details
 from typestore.datatypes import SessionHandler
 from typestore.errors import DataDependencyError, ResponseError
-from webtools.response import BytesResponse
+from webtools.response import BinaryResponse
 
 
 logger = getLogger(__name__)
+
+
+async def download_repology_database_dump(
+        session_manager: SessionHandler,
+        downloads_directory: Path,
+        semaphore: Semaphore,
+        output_name: str = 'repology_dump',
+):
+    url = 'https://dumps.repology.org/repology-database-dump-latest.sql.zst'
+    extensions = '.sql.zst'
+    await _fetch_file_safe(
+        url,
+        session_manager,
+        downloads_directory,
+        output_name,
+        semaphore=semaphore,
+        extensions=extensions
+    )
+
 
 
 async def download_apkindex_files(
@@ -36,8 +55,8 @@ async def download_apkindex_files(
                 session_manager,
                 downloads_directory,
                 file['file_name'],
-                extensions='.tar.gz',
-                semaphore=semaphore
+                semaphore=semaphore,
+                extensions='.tar.gz'
             ),
             name=str(uuid4())
         )
@@ -59,8 +78,8 @@ async def download_cpe_dictionary(
         session_manager,
         downloads_directory,
         output_file_name,
-        extensions=extensions,
-        semaphore=semaphore
+        semaphore=semaphore,
+        extensions=extensions
     )
 
 
@@ -78,9 +97,9 @@ async def download_spdx_licenses(
         session_manager,
         downloads_directory,
         output_file_name,
+        semaphore=semaphore,
         extensions=extensions,
-        session_name=session_name,
-        semaphore=semaphore
+        session_name=session_name
     )
 
 
@@ -89,19 +108,17 @@ async def _fetch_file(
         session_manager: SessionHandler,
         downloads_directory: Path,
         output_file_name: str,
+        semaphore: Semaphore | None = None,
         extensions: str = '',
-        session_name: str = 'common',
-        semaphore: Semaphore = None
+        session_name: str = 'common'
 ) -> str | None:
-    if semaphore is None:
-        semaphore = Semaphore()
     output_filename_with_extensions = output_file_name + extensions
     try:
-        response = await BytesResponse(
+        response = await BinaryResponse(
             url,
             session_manager,
-            session_name=session_name,
-            semaphore=semaphore
+            semaphore=semaphore,
+            session_name=session_name
         ).fetch()
     except ResponseError:
         message = 'Download error'
@@ -128,9 +145,9 @@ async def _fetch_file_safe(
         session_manager: SessionHandler,
         downloads_directory: Path,
         output_file_name: str,
+        semaphore: Semaphore | None = None,
         extensions: str = '',
-        session_name: str = 'common',
-        semaphore: Semaphore = Semaphore()
+        session_name: str = 'common'
 ) -> str | None:
     try:
         return await _fetch_file(
@@ -138,9 +155,9 @@ async def _fetch_file_safe(
             session_manager,
             downloads_directory,
             output_file_name,
+            semaphore=semaphore,
             extensions=extensions,
-            session_name=session_name,
-            semaphore=semaphore
+            session_name=session_name
         )
     except (DataDependencyError, ResponseError):
         return None

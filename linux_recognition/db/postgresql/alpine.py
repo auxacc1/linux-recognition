@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from anyio import Path
 from asyncpg import Connection, Pool, Record
+from jinja2 import Environment
 
 from db.postgresql.core import query_db
 from log_management import get_error_details
@@ -23,7 +24,10 @@ logger = getLogger(__name__)
 
 
 async def fetch_alpine_package_info(
-        pool: Pool, package: str, project_directory: Path
+        pool: Pool,
+        environment: Environment,
+        package: str,
+        semaphore: Semaphore
 ) -> dict[str, str] | None:
 
     async def query_fn(connection: Connection, query: str) -> Record | None:
@@ -31,13 +35,17 @@ async def fetch_alpine_package_info(
 
     query_file = 'packages_get_package_info.sql'
     try:
-        result = await query_db(pool, query_fn, query_file, project_directory)
+        result = await query_db(pool, environment, query_fn, query_file, semaphore)
     except (DatabaseError, SQLTemplateError):
         return None
     return dict(result) if result is not None else None
 
 
-async def create_alpine_packages_table(pool: Pool, project_directory: Path) -> None:
+async def create_alpine_packages_table(
+        pool: Pool,
+        environment: Environment,
+        semaphore: Semaphore
+) -> None:
 
     async def query_fn(connection: Connection, query_qrg: str) -> str:
         return await connection.execute(query_qrg)
@@ -45,7 +53,7 @@ async def create_alpine_packages_table(pool: Pool, project_directory: Path) -> N
     query_file = 'packages_create_alpine_packages.sql'
     dbname, table_name = 'packages', 'alpine_packages'
     try:
-        await query_db(pool, query_fn, query_file, project_directory)
+        await query_db(pool, environment, query_fn, query_file, semaphore)
     except (DatabaseError, SQLTemplateError):
         logger.error('Table creation failed', extra={
             'database': dbname,
@@ -60,9 +68,10 @@ async def create_alpine_packages_table(pool: Pool, project_directory: Path) -> N
 
 async def update_alpine_packages_table(
         pool: Pool,
+        environment: Environment,
         project_directory: Path,
         session_manager: SessionHandler,
-        semaphore: Semaphore,
+        semaphore: Semaphore
 ) -> None:
     downloads_directory = project_directory / 'data' / 'downloaded'
     download_info = await download_apkindex_files(session_manager, downloads_directory, semaphore)
@@ -78,7 +87,7 @@ async def update_alpine_packages_table(
     query_file = 'packages_insert_alpine_packages.sql'
     dbname, table_name = 'packages', 'alpine_packages'
     try:
-        await query_db(pool, query_fn, query_file, project_directory)
+        await query_db(pool, environment, query_fn, query_file, semaphore)
     except (DatabaseError, SQLTemplateError):
         logger.error('Failed upsert', extra={
             'database': dbname,

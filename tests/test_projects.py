@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from typestore.datatypes import VersionNormalizationPatterns
@@ -146,7 +148,7 @@ output = {
 
 
 @pytest.fixture(scope='class')
-def project_classes():
+def project_classes() -> dict[str, type[Project]]:
     supported_projects = get_supported_projects()
     return {
         r.__name__: r for r in supported_projects
@@ -154,8 +156,8 @@ def project_classes():
 
 
 @pytest.fixture(scope='class', params=list(input_samples.keys()))
-def samples(request, project_classes):
-    init = input_samples[request.param]
+def samples(request, project_classes) -> dict[str, Any]:
+    init: dict[str, Any] = input_samples[request.param]
     init['class'] = project_classes[request.param]
     data = {'init': init, 'output': output[request.param]}
     return data
@@ -164,7 +166,7 @@ def samples(request, project_classes):
 class TestProject:
 
     @pytest.fixture(scope='class')
-    async def project_instance(self, recognition_context: RecognitionContext, samples: dict):
+    async def project_instance(self, recognition_context: RecognitionContext, samples: dict) -> Project:
         init_data = samples['init']
         url = init_data['url']
         patterns = VersionNormalizationPatterns()
@@ -179,7 +181,7 @@ class TestProject:
         await project.initialize()
         return project
 
-    async def test_get_software(self, project_instance: Project, samples: dict):
+    async def test_get_software(self, project_instance: Project, samples: dict) -> None:
         expected_output = samples['output']
         brand = await project_instance.get_software()
         assert isinstance(brand, Brand)
@@ -195,25 +197,25 @@ class TestProject:
         assert brand.name == expected_brand.name
         assert set(brand.alternative_names) == set(expected_brand.alternative_names)
 
-    def test_get_homepage(self, project_instance: Project, samples: dict):
+    def test_get_homepage(self, project_instance: Project, samples: dict) -> None:
         expected_output = samples['output']
         homepage = project_instance.get_homepage()
         assert isinstance(homepage, str)
         assert homepage == expected_output['homepage']
 
-    async def test_get_description(self, project_instance: Project):
+    async def test_get_description(self, project_instance: Project) -> None:
         description = await project_instance.get_description()
         assert isinstance(description, str)
         assert description
 
-    async def test_get_licenses(self, project_instance: Project, samples: dict):
+    async def test_get_licenses(self, project_instance: Project, samples: dict) -> None:
         expected_output = samples['output']
         license_info = await project_instance.get_license_info()
         content = license_info.content
         assert isinstance(content, list)
         assert set([l[:16] for l in content]) in ({l[:16] for l in item} for item in expected_output['licenses'])
 
-    async def test_get_release(self, project_instance: Project, samples: dict):
+    async def test_get_release(self, project_instance: Project, samples: dict) -> None:
         expected_output = samples['output']
         release = await project_instance.get_release()
         assert isinstance(release, Release)

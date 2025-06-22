@@ -239,11 +239,24 @@ class Project(ABC):
                 for l in changelog_lines[line_index + 1:]:
                     year_match = year_pattern.search(l)
                     if year_match is not None:
-                        date.year = year_match.group()
+                        date.year = int(year_match.group())
                         date = date.check_day_in_month()
                         if date is not None:
                             iso_date = date.iso_format()
         return Release(version, iso_date)
+
+    async def _fetch_release_from_rss(self, url: str) -> Release:
+        matching_items: list[ReleaseInfo] = []
+        matched_item = await self._search_rss_feed(url, matching_items)
+        if matched_item is None:
+            if not matching_items:
+                return Release(self._version_with_suffix)
+            matched_item = self._get_best_match(matching_items)
+        date_patterns = self._recognition_context.date_patterns
+        date = parse_date(matched_item.date_info, patterns=date_patterns)
+        if date is None:
+            return Release(self._version_with_suffix)
+        return Release(self._version_with_suffix, date.iso_format())
 
     async def _search_rss_feed(self, rss_url: str, matching_items: list[ReleaseInfo]) -> ReleaseInfo | None:
         try:
@@ -281,6 +294,7 @@ class Project(ABC):
             release_info = ReleaseInfo(match=match, date_info=date_info, tail=tail)
             partial_matches.append(release_info)
             return None
+        return None
 
     def _get_best_match[ReleaseItemType: ReleaseItem](
             self,
@@ -366,6 +380,7 @@ class GitProject(Project, ABC):
                 return None
             if (tag_with_version := self._match_tag_with_version(tags)) is not None:
                 return tag_with_version
+        return None
 
     def _match_tag_with_version[TV: GitTagWithVersion](self, tags: list[Mapping]) -> TV | None:
         if self._version_info.is_date:
@@ -435,7 +450,7 @@ class GitProject(Project, ABC):
             if date_tag_info.fully_matching and date_tag_info.suffix_consistent:
                 return GitTagWithVersion(matched_tag, version_info.name)
             matching_info.append(date_tag_info)
-        best_match = next(
+        best_match: GitTag | None = next(
             chain(
                 (info.tag for info in matching_info if info.fully_matching),
                 (info.tag for info in matching_info if info.suffix_consistent),

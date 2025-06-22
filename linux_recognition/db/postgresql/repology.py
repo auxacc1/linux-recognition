@@ -1,13 +1,23 @@
 import re
-from collections.abc import Callable
+import subprocess
+from asyncio import Semaphore
+from collections.abc import Callable, Iterable
 from itertools import chain
-from logging import getLogger
+from logging import DEBUG, getLogger
+from platform import system
+from os import environ
+from shutil import which
 from typing import Any
 
 from anyio import Path
 from asyncpg import Pool, Connection, Record
+from jinja2 import Environment
+from zstandard import ZstdDecompressor, ZstdError
 
+from configuration import PostgresConfig
 from db.postgresql.core import query_db
+from log_management import get_error_details
+from synchronization import async_to_thread
 from typestore.errors import DatabaseError, SQLTemplateError
 
 
@@ -18,8 +28,9 @@ async def fetch_package_info(
         package: str,
         family: str | None,
         pool: Pool,
+        environment: Environment,
         is_host_supported: Callable[[str], bool],
-        project_directory: Path
+        semaphore: Semaphore
 ) -> dict[str, Any] | None:
 
     if family is None:
@@ -29,8 +40,8 @@ async def fetch_package_info(
 
         query_file = 'repology_get_info_for_package.sql'
         try:
-            records = await query_db(pool, query_fn, query_file, project_directory)
-        except DatabaseError:
+            records = await query_db(pool, environment, query_fn, query_file, semaphore)
+        except (DatabaseError, SQLTemplateError):
             return None
         if not records:
             return None
@@ -42,7 +53,7 @@ async def fetch_package_info(
 
     query_file = 'repology_get_info_for_package_within_family.sql'
     try:
-        records = await query_db(pool, query_fn, query_file, project_directory)
+        records = await query_db(pool, environment, query_fn, query_file, semaphore)
     except DatabaseError:
         return None
     if not records:
@@ -64,7 +75,7 @@ async def fetch_package_info(
 
     query_file = 'repology_get_info_for_package_with_matching_version.sql'
     try:
-        records = await query_db(pool, query_fn, query_file, project_directory)
+        records = await query_db(pool, environment, query_fn, query_file, semaphore)
     except (DatabaseError, SQLTemplateError):
         return dict(family_constrained_record)
     record = _select_highest_priority_record(
@@ -74,49 +85,71 @@ async def fetch_package_info(
     return dict(record)
 
 
-async def rebuild_repology_database(pool: Pool, project_directory: Path) -> None:
+async def decompress_repology_database_dump(
+        input_name: str,
+        output_name: str,
+        project_directory: Path,
+        semaphore: Semaphore
+) -> None:
+    downloads_directory = project_directory / 'data' / 'downloaded'
+    input_path =  downloads_directory / input_name
+    output_path = downloads_directory / output_name
+    try:
+        await async_to_thread(semaphore, _zstd_decompress, input_path, output_path)
+    except ZstdError as e:
+        message = 'Failed to decompress repology database dump'
+        extra = get_error_details(e)
+        extra['file_name'] = input_name
+        logger.error(message, exc_info=logger.isEnabledFor(DEBUG), extra=extra)
+        raise
+
+
+async def restore_repology_origin_database(
+        pool: Pool,
+        environment: Environment,
+        project_directory: Path,
+        dump_file: str,
+        semaphore: Semaphore,
+        postgres_config: PostgresConfig,
+        psql_directory: Path | None = None
+) -> None:
+    await _restore_database(dump_file, postgres_config, project_directory, semaphore, psql_directory=psql_directory)
+    schemas = ['public', 'repology']
+    await _set_search_path(pool, environment, semaphore, postgres_config.dbname, schemas)
+
+
+async def rebuild_repology_database(
+        pool: Pool,
+        environment: Environment,
+        semaphore: Semaphore
+) -> None:
 
     async def query_fn(connection: Connection, query: str) -> str:
         return await connection.execute(query)
 
+    logger.info('Repology database rebuild started')
     execution_order = [
-        'repology_create_src_packages_no_urls.sql',
-        'repology_create_link_ids.sql',
-        'repology_create_package_urls.sql',
-        'repology_drop_link_ids.sql',
-        'repology_create_packages_info.sql',
-        'repology_drop_src_packages_no_links_and_packages_urls.sql',
+        'repology_create_seed_packages_no_urls.sql',
+        'repology_create_links_ids.sql',
+        'repology_create_seed_packages_urls.sql',
+        'repology_drop_links_ids.sql',
+        'repology_create_seed_packages_info.sql',
+        'repology_drop_seed_packages_no_urls_and_seed_packages_urls.sql',
         'repology_create_packages_info.sql',
         'repology_create_indexes_on_packages_info.sql',
-        'repology_drop_redundant_tables.sql'
+        'repology_drop_redundant.sql'
     ]
     for query_file in execution_order:
         try:
-            await query_db(pool, query_fn, query_file, project_directory)
+            command_status = await query_db(pool, environment, query_fn, query_file, semaphore)
         except (DatabaseError, SQLTemplateError):
             logger.critical('Database rebuild failed', extra={
                 'database': 'repology',
                 'query_file': query_file
             })
             raise
-
-
-async def fetch_table_names(pool: Pool, project_directory: Path) -> list[str]:
-
-    async def query_fn(connection: Connection, query: str) -> list[Record]:
-        return await connection.fetch(query)
-
-    query_file = 'repology_get_table_names.sql'
-    try:
-        records = await query_db(pool, query_fn, query_file, project_directory)
-    except (DatabaseError, SQLTemplateError):
-        logger.critical('Failed to fetch repology database table names', extra={
-            'database': 'repology',
-            'query_file': query_file
-        })
-        raise
-    return [record['tablename'] for record in records]
-
+        logger.info(command_status, extra={'query_file': query_file})
+    logger.info('Repology database rebuild completed')
 
 
 def _select_highest_priority_record(
@@ -159,3 +192,92 @@ def _get_corresponding_sql_patterns(versions: list[str]) -> list[str]:
         else:
             sql_version_patterns.append(version)
     return list(set(sql_version_patterns))
+
+
+def _zstd_decompress(input_path: Path, output_path: Path) -> None:
+    dctx = ZstdDecompressor()
+    with open(input_path, 'rb') as ifh, open(output_path, 'wb') as ofh:
+        dctx.copy_stream(ifh, ofh, read_size=1048576, write_size=1048576)
+
+
+async def _restore_database(
+        dump_file: str,
+        postgres_config: PostgresConfig,
+        project_directory: Path,
+        semaphore: Semaphore,
+        psql_directory: Path | None = None
+) -> None:
+    try:
+        await async_to_thread(
+            semaphore,
+            _execute_restore_command,
+            dump_file,
+            postgres_config,
+            project_directory,
+            psql_directory=psql_directory
+        )
+    except subprocess.SubprocessError as e:
+        message = 'Repology database restore failed'
+        extra = get_error_details(e)
+        logger.error(message, exc_info=logger.isEnabledFor(DEBUG), extra=extra)
+        raise
+    logger.info('Repology database restore completed')
+
+
+def _execute_restore_command(
+        dump_file: str,
+        postgres_config: PostgresConfig,
+        project_directory: Path,
+        psql_directory: Path | None = None
+) -> None:
+    psql_path = _resolve_psql_path(psql_directory)
+    host = postgres_config.host
+    port = str(postgres_config.port)
+    user = postgres_config.user
+    database = postgres_config.dbname
+    dump_path = str(project_directory / 'data' / 'downloaded' / dump_file)
+    env = environ.copy()
+    env['PGPASSWORD'] = postgres_config.password
+    arguments = [psql_path, '-h', host, '-p', port, '-U', user, '-d', database, '-f', dump_path]
+    with subprocess.Popen(
+            arguments,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            text=True,
+            bufsize=1,
+            encoding='utf-8'
+    ) as process:
+        for line in process.stdout:
+            logger.info(line.strip, extra={'executable': 'psql'})
+    return_code = process.poll()
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, arguments)
+
+
+def _resolve_psql_path(psql_directory: Path | None) -> str:
+    psql_executable = 'psql.exe' if system() == 'Windows' else 'psql'
+    psql_path = which(psql_executable)
+    if psql_path is not None:
+        return psql_path
+    if psql_directory is None:
+        raise FileNotFoundError('psql binary not found')
+    psql_path = psql_directory / psql_executable
+    if not psql_path.is_file():
+        raise FileNotFoundError(f'psql binary not found at {psql_path}')
+    return str(psql_path)
+
+
+async def _set_search_path(
+        pool: Pool,
+        environment: Environment,
+        semaphore: Semaphore,
+        dbname: str,
+        schemas: Iterable[str]
+) -> None:
+
+    async def query_fn(connection: Connection, query: str) -> str:
+        return await connection.execute(query)
+
+    query_file = 'repology_set_search_path.sql'
+    await query_db(pool, environment, query_fn, query_file, semaphore, dbname=dbname, schemas=schemas)

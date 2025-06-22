@@ -1,7 +1,6 @@
 import logging
 from contextlib import contextmanager
-from platform import system
-from typing import Self
+from typing import Self, NamedTuple
 
 from anyio import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator, NonNegativeInt, SecretStr
@@ -18,22 +17,33 @@ class PostgresConfig(BaseModel):
     user: str
     password: str = Field(exclude=True)
     host: str
-    port: int
+    port: str
 
-    model_config = ConfigDict(frozen=True, hide_input_in_errors=True)
+    model_config = ConfigDict(frozen=True, coerce_numbers_to_str=True, hide_input_in_errors=True)
 
     def for_database(self, database_name: str) -> Self:
         return self.model_copy(update={'dbname': database_name})
 
 
+class CoreDatabases(NamedTuple):
+    recognized: str
+    packages: str
+    repology: str
+
+
 class DatabaseSettings(BaseModel):
-    recognized_db: str
-    packages_db: str
-    repology_db: str
+    core_databases: CoreDatabases
     postgres_default: PostgresConfig
     postgres_udd: PostgresConfig
+    psql_directory: str | None = None
 
     model_config = ConfigDict(frozen=True, hide_input_in_errors=True)
+
+    # noinspection PyNestedDecorators
+    @field_validator('psql_directory', mode='after')
+    @classmethod
+    def get_path(cls, directory: str) -> Path | None:
+        return Path(directory) if directory is not None else None
 
 
 class LoggingAttributes(BaseModel):
@@ -78,25 +88,17 @@ class OpenAiModels(BaseModel):
     embeddings: str = Field(default='text-embedding-3-large')
 
 
-class Settings(BaseSettings):
-    database: DatabaseSettings
-    logging: LoggingSettings
-    openai: OpenAiModels
-
-
-class Credentials(BaseSettings):
-    pypi_user_agent: SecretStr = Field(exclude=True)
-    sourceforge_bearer: SecretStr = Field(exclude=True)
-    obs_username: SecretStr = Field(exclude=True)
-    obs_password: SecretStr = Field(exclude=True)
-    github_token: SecretStr = Field(exclude=True)
-    openai_api_key: SecretStr = Field(exclude=True)
-
-
 @contextmanager
 def validated_credentials(env_file: Path, env_prefix: str):
 
-    class CredentialsClass(Credentials):
+    class Credentials(BaseSettings):
+        pypi_user_agent: SecretStr = Field(exclude=True)
+        sourceforge_bearer: SecretStr = Field(exclude=True)
+        obs_username: SecretStr = Field(exclude=True)
+        obs_password: SecretStr = Field(exclude=True)
+        github_token: SecretStr = Field(exclude=True)
+        openai_api_key: SecretStr = Field(exclude=True)
+
         model_config = SettingsConfigDict(
             env_file=env_file,
             env_prefix=env_prefix,
@@ -104,8 +106,15 @@ def validated_credentials(env_file: Path, env_prefix: str):
             hide_input_in_errors=True
         )
 
-    CredentialsClass()
+    # noinspection PyArgumentList
+    Credentials()
     yield
+
+
+class Settings(BaseSettings):
+    database: DatabaseSettings
+    logging: LoggingSettings
+    openai: OpenAiModels
 
 
 def initialize_settings(project_directory: Path) -> Settings:
@@ -136,32 +145,10 @@ def initialize_settings(project_directory: Path) -> Settings:
             return env_settings, dotenv_settings, YamlConfigSettingsSource(settings_cls)
 
     with validated_credentials(env_file, env_prefix):
+        # noinspection PyArgumentList
         return SettingsClass()
 
 
 async def get_project_directory() -> Path:
     file_path = await Path(__file__).resolve()
     return file_path.parent
-
-
-async def is_initialized() -> bool:
-    data_directory = await _get_data_directory()
-    return await (data_directory / 'initialized').exists()
-
-
-async def mark_initialized():
-    data_directory = await _get_data_directory()
-    await data_directory.mkdir(parents=True, exist_ok=True)
-    await (data_directory / 'initialized').touch(exist_ok=True)
-
-
-async def _get_data_directory() -> Path:
-    system_used = system()
-    if system_used == 'Windows':
-        data_directory = await Path.home() / 'AppData' / 'Local' / 'linux_recognition'
-    elif system_used == 'Linux':
-        data_directory = await Path.home() / '.local' / 'share' / 'linux_recognition'
-    else:
-        project_directory = await get_project_directory()
-        data_directory = project_directory.parent  / '.linux_recognition'
-    return data_directory

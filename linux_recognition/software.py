@@ -3,6 +3,8 @@ from asyncio import Semaphore
 from logging import getLogger, DEBUG
 from typing import Self
 
+from jinja2 import Environment
+
 from context import RecognitionContext
 from data.predefined import PREDEFINED_PROPERTIES
 from db.postgresql.cpe import get_cpe_entities
@@ -40,8 +42,10 @@ class SoftwareRecognizer:
         self.release_date: str = ''
         self.cpe_string: str = ''
         self._recognition_context: RecognitionContext = recognition_context
-        self._fingerprint: Fingerprint = fingerprint
+        self._jinja_environment: Environment = recognition_context.jinja_environment
         self._llm_interaction: LlmInteraction = self._recognition_context.llm_interaction
+        self._semaphore: Semaphore = self._recognition_context.synchronization.semaphore
+        self._fingerprint: Fingerprint = fingerprint
         self._raw_software: str = self._fingerprint.software
         self._raw_publisher: str = self._fingerprint.publisher
         self._raw_version: str = self._fingerprint.version
@@ -94,7 +98,8 @@ class SoftwareRecognizer:
         ruby_pattern = self._recognition_context.library_patterns.ruby
         ruby_match = ruby_pattern.search(self._raw_software)
         if ruby_match is not None:
-           return await self._recognize_ruby_package(ruby_match)
+            await self._recognize_ruby_package(ruby_match)
+            return
         perl_pattern = self._recognition_context.library_patterns.perl
         perl_match = perl_pattern.search(self._raw_software)
         if perl_match is not None:
@@ -176,13 +181,9 @@ class SoftwareRecognizer:
             self._package_url = package_instance.get_package_url()
             if not self._package_url:
                 continue
-            self._package_instance = package_instance
             self._utilized_package_class_name = cls.__name__
-            self._package_name = package_instance.get_name() or self._raw_software
-            self._package_vendor = package_instance.get_vendor()
-            self._homepage_candidate = package_instance.get_homepage()
-            self._description = package_instance.get_description()
-            self._license_info = package_instance.get_license_info()
+            self._fetch_metadata_for_recognized_package(package_instance)
+            return
 
     async def _fetch_with_universal_class(self) -> None:
         package_instance = UniversalPackage(
@@ -193,8 +194,11 @@ class SoftwareRecognizer:
         self._package_url = package_instance.get_package_url()
         if not self._package_url:
             return
-        self._package_instance = package_instance
         self._utilized_package_class_name = UniversalPackage.__name__
+        self._fetch_metadata_for_recognized_package(package_instance)
+
+    def _fetch_metadata_for_recognized_package(self, package_instance: LinuxPackage):
+        self._package_instance = package_instance
         self._package_name = package_instance.get_name() or self._raw_software
         self._package_vendor = package_instance.get_vendor()
         self._homepage_candidate = package_instance.get_homepage()
@@ -203,7 +207,8 @@ class SoftwareRecognizer:
 
     async def _retrieve_package_information(self) -> None:
         if not self._homepage_candidate:
-            return await self._recognize_distro_specific_package()
+            await self._recognize_distro_specific_package()
+            return
         self._homepage_candidate = await correct_url(
             self._recognition_context, self._homepage_candidate, self._package_name
         )
@@ -304,12 +309,12 @@ class SoftwareRecognizer:
         ]
         self._matching_cpe_entities = await get_cpe_entities(
             self._recognition_context.source_db_pools.packages,
-            self._recognition_context.project_directory,
-            software_names
+            self._jinja_environment,
+            software_names,
+            self._semaphore
         )
-        semaphore: Semaphore = self._recognition_context.synchronization.semaphore
         await async_to_thread(
-            semaphore, self._establish_cpe_identity, self._matching_cpe_entities
+            self._semaphore, self._establish_cpe_identity, self._matching_cpe_entities
         )
 
     def _establish_cpe_identity(self, records: list[tuple[str, str, str]]) -> None:
@@ -350,8 +355,7 @@ class SoftwareRecognizer:
         else:
             license_identifiers = self._extract_license_identifiers()
         pool = self._recognition_context.source_db_pools.packages
-        project_directory = self._recognition_context.project_directory
-        matched_items = await fetch_licenses(pool, project_directory, license_identifiers)
+        matched_items = await fetch_licenses(pool, self._jinja_environment, license_identifiers, self._semaphore)
         matched_identifiers = [item.identifier for item in matched_items]
         licenses = [item.name for item in matched_items]
         unmatched_identifiers = [

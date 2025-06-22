@@ -5,15 +5,36 @@ WITH other_names_agg AS (
         family,
         array_agg(DISTINCT name ORDER BY name) AS other_names
     FROM (
-        SELECT projectname_seed, family, srcname AS name FROM packages WHERE srcname IS NOT NULL
+        SELECT
+            projectname_seed,
+            family,
+            srcname AS name
+        FROM packages
+        WHERE srcname IS NOT NULL
         UNION
-        SELECT projectname_seed, family, binname AS name FROM packages WHERE binname IS NOT NULL
+        SELECT
+            projectname_seed,
+            family,
+            binname AS name
+        FROM packages WHERE binname IS NOT NULL
         UNION
-        SELECT projectname_seed, family, visiblename AS name FROM packages WHERE visiblename IS NOT NULL
+        SELECT
+            projectname_seed,
+            family,
+            visiblename AS name
+        FROM packages WHERE visiblename IS NOT NULL
         UNION
-        SELECT projectname_seed, family, trackname AS name FROM packages WHERE trackname IS NOT NULL
+        SELECT
+            projectname_seed,
+            family,
+            trackname AS name
+        FROM packages
+        WHERE trackname IS NOT NULL
         UNION
-        SELECT p.projectname_seed, p.family, bn AS name
+        SELECT
+            p.projectname_seed,
+            p.family,
+            bn AS name
         FROM packages p, LATERAL unnest(p.binnames) bn
         WHERE p.binnames IS NOT NULL
     ) all_names
@@ -64,10 +85,10 @@ SELECT DISTINCT ON (p.projectname_seed, p.family)
     descagg.description,
     licagg.licenses,
     veragg.versions
-INTO src_packages_no_urls
+INTO seed_packages_no_urls
 FROM packages p
 LEFT JOIN other_names_agg onagg ON onagg.projectname_seed = p.projectname_seed AND onagg.family = p.family
 LEFT JOIN description_agg descagg ON descagg.projectname_seed = p.projectname_seed AND descagg.family = p.family
 LEFT JOIN licenses_agg licagg ON licagg.projectname_seed = p.projectname_seed AND licagg.family = p.family
 LEFT JOIN version_agg veragg ON veragg.projectname_seed = p.projectname_seed AND veragg.family = p.family
-ORDER BY p.projectname_seed, p.family
+ORDER BY p.projectname_seed, p.family;

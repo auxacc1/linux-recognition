@@ -1,24 +1,44 @@
-from asyncio import run
-from logging import DEBUG
+from asyncio import run, SelectorEventLoop, Semaphore
+from logging import DEBUG, Logger
+from platform import system
 
-from configuration import get_project_directory, initialize_settings, is_initialized, mark_initialized
+from anyio import Path
+from asyncpg import Pool
+from jinja2 import Environment
+
+from configuration import get_project_directory, initialize_settings, Settings
 from context import managed_context, prepare_context
 from db.postgresql.alpine import create_alpine_packages_table, update_alpine_packages_table
+from db.postgresql.core import create_database
 from db.postgresql.cpe import create_cpe_entities, populate_cpe_entities
 from db.postgresql.licenses import create_licenses_table, populate_licenses_table
 from db.postgresql.output import create_output_table
-from db.postgresql.repology import rebuild_repology_database
+from db.postgresql.repology import (
+    rebuild_repology_database, decompress_repology_database_dump, restore_repology_origin_database
+)
 from log_management import get_error_details, init_logging
-from typestore.datatypes import RecognitionContext
+from typestore.datatypes import RecognitionContext, SessionHandler
 from typestore.errors import LinuxRecognitionError
-from webtools.download import download_cpe_dictionary, download_spdx_licenses
+from webtools.download import download_cpe_dictionary, download_repology_database_dump, download_spdx_licenses
 
 
 def initialize() -> None:
+    run(_prepare_initialization_environment(), loop_factory=SelectorEventLoop)
     run(_initialize())
 
 
-async def _initialize() -> None:
+async def is_initialized() -> bool:
+    data_directory = await _get_data_directory()
+    return await (data_directory / 'initialized').exists()
+
+
+async def mark_initialized():
+    data_directory = await _get_data_directory()
+    await data_directory.mkdir(parents=True, exist_ok=True)
+    await (data_directory / 'initialized').touch(exist_ok=True)
+
+
+async def _prepare_initialization_environment() -> None:
     project_directory = await get_project_directory()
     settings = initialize_settings(project_directory)
     logger, listener = init_logging(settings.logging, project_directory)
@@ -33,13 +53,28 @@ async def _initialize() -> None:
         if initialized:
             logger.warning('Project already initialized')
             return
-        logger.info('Initialization started')
+        await _create_databases(settings, logger)
+
+
+async def _create_databases(settings: Settings, logger: Logger) -> None:
+    core_databases = settings.database.core_databases
+    for database in core_databases:
+        postgres_config = settings.database.postgres_default.for_database(database)
+        await create_database(postgres_config)
+    logger.info('Databases successfully created')
+
+
+async def _initialize() -> None:
+    project_directory = await get_project_directory()
+    settings = initialize_settings(project_directory)
+    logger, listener = init_logging(settings.logging, project_directory)
+    with listener.started():
         context = await prepare_context(
             project_directory, settings, create_licenses_vectorstore=False
         )
         async with managed_context(context) as recognition_context:
             try:
-                await _prepare_databases(recognition_context)
+                await _populate_initial_data(recognition_context, settings)
             except LinuxRecognitionError:
                 message = 'Databases initialization failed'
                 logger.critical(message, exc_info=logger.isEnabledFor(DEBUG))
@@ -53,25 +88,76 @@ async def _initialize() -> None:
                 logger.critical(message, exc_info=logger.isEnabledFor(DEBUG), extra=extra)
 
 
-async def _prepare_databases(recognition_context: RecognitionContext) -> None:
+async def _populate_initial_data(recognition_context: RecognitionContext, settings: Settings) -> None:
     # currently only partially parallelized
-    recognition_context: RecognitionContext
+
     session_manager = recognition_context.session_handler
+    jinja_environment = recognition_context.jinja_environment
     semaphore = recognition_context.synchronization.semaphore
-    project_directory = recognition_context.project_directory
-
-    await create_output_table(recognition_context.recognized_db_pool, project_directory)
-
-    await rebuild_repology_database(recognition_context.source_db_pools.repology, project_directory)
-
+    recognized_pool = recognition_context.recognized_db_pool
+    repology_pool = recognition_context.source_db_pools.repology
     packages_pool = recognition_context.source_db_pools.packages
-    await create_alpine_packages_table(packages_pool, project_directory)
-    await update_alpine_packages_table(packages_pool, project_directory, session_manager, semaphore)
-
+    project_directory = recognition_context.project_directory
     downloads_directory = project_directory / 'data' / 'downloaded'
+
+    await _build_repology_origin_database(
+        session_manager,
+        repology_pool,
+        jinja_environment,
+        project_directory,
+        semaphore,
+        settings
+    )
+    await rebuild_repology_database(repology_pool, jinja_environment, semaphore)
+
+    await create_alpine_packages_table(packages_pool, jinja_environment, semaphore)
+    await update_alpine_packages_table(packages_pool, jinja_environment, project_directory, session_manager, semaphore)
+
     await download_cpe_dictionary(recognition_context.session_handler, downloads_directory, semaphore)
-    await create_cpe_entities(packages_pool, project_directory)
-    await populate_cpe_entities(packages_pool, project_directory)
+    await create_cpe_entities(packages_pool, jinja_environment, semaphore)
+    await populate_cpe_entities(packages_pool, jinja_environment, project_directory, semaphore)
+
     await download_spdx_licenses(recognition_context.session_handler, downloads_directory, semaphore)
-    await create_licenses_table(packages_pool, project_directory)
-    await populate_licenses_table(packages_pool, project_directory)
+    await create_licenses_table(packages_pool, jinja_environment, semaphore)
+    await populate_licenses_table(packages_pool, jinja_environment, project_directory, semaphore)
+
+    await create_output_table(recognized_pool, jinja_environment, semaphore)
+
+
+async def _build_repology_origin_database(
+        session_manager: SessionHandler,
+        pool: Pool,
+        environment: Environment,
+        project_directory: Path,
+        semaphore: Semaphore,
+        settings: Settings
+) -> None:
+    downloads_directory = project_directory / 'data' / 'downloaded'
+    dump_name = 'repology_dump'
+    compressed_dump_name = f'{dump_name}.sql.zst'
+    decompressed_dump_name = f'{dump_name}.sql'
+    postgres_config = settings.database.postgres_default.for_database(settings.database.core_databases.repology)
+    psql_directory = settings.database.psql_directory
+    await download_repology_database_dump(session_manager, downloads_directory, semaphore, dump_name)
+    await decompress_repology_database_dump(compressed_dump_name, decompressed_dump_name, project_directory, semaphore)
+    await restore_repology_origin_database(
+        pool,
+        environment,
+        project_directory,
+        decompressed_dump_name,
+        semaphore,
+        postgres_config,
+        psql_directory=psql_directory
+    )
+
+
+async def _get_data_directory() -> Path:
+    system_used = system()
+    if system_used == 'Windows':
+        data_directory = await Path.home() / 'AppData' / 'Local' / 'linux_recognition'
+    elif system_used == 'Linux':
+        data_directory = await Path.home() / '.local' / 'share' / 'linux_recognition'
+    else:
+        project_directory = await get_project_directory()
+        data_directory = project_directory.parent  / '.linux_recognition'
+    return data_directory

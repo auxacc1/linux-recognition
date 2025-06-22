@@ -1,4 +1,5 @@
 import re
+from abc import abstractmethod
 from base64 import b64encode
 from collections.abc import Iterable, Mapping
 from logging import getLogger
@@ -38,6 +39,7 @@ class LinuxPackage(Package):
         self._is_host_supported = recognition_context.is_host_supported
         self._session_manager = recognition_context.session_handler
         self._db_pools = recognition_context.source_db_pools
+        self._jinja_environment = recognition_context.jinja_environment
         self._semaphore = recognition_context.synchronization.semaphore
         self._raw_name = fingerprint.software.replace(' ', '-')
         self._name: str = ''
@@ -71,7 +73,7 @@ class LinuxPackage(Package):
     def get_license_info(self) -> LicenseInfo:
         return self._license_info
 
-    async def get_data_for_universal_package(self) -> str:
+    async def _get_data_for_universal_package(self) -> str:
         universal_package = await UniversalPackage(
             self._recognition_context, self._fingerprint, self._family
         ).initialize()
@@ -157,6 +159,29 @@ class DebianBasedPackage(LinuxPackage):
         lib_pattern = r'^lib(?!rary|ert|erat|ellous)-?'
         self._name = re.sub(lib_pattern, '', self._name, flags=re.IGNORECASE)
 
+    async def _fetch_from_udd(self) -> None:
+        udd = UDD(
+            self._raw_name,
+            self._db_pools.udd,
+            self._jinja_environment,
+            self._semaphore,
+            udd_lock=self._recognition_context.synchronization.udd_lock
+        )
+        self._homepage = await udd.get_homepage()
+        self._name = udd.get_source_package()
+        if not self._name:
+            udd = UDD(
+                self._raw_name,
+                self._db_pools.udd,
+                self._jinja_environment,
+                self._semaphore,
+                udd_lock=self._recognition_context.synchronization.udd_lock,
+                packages_table='archived_packages',
+                sources_table='archived_sources'
+            )
+            self._homepage = await udd.get_homepage()
+            self._name = udd.get_source_package()
+
 
 class DebianPackage(DebianBasedPackage):
 
@@ -177,34 +202,15 @@ class DebianPackage(DebianBasedPackage):
         self._license_url = ''
 
     async def initialize(self) -> Self:
-        self._homepage = await self.get_data_for_universal_package()
+        self._homepage = await self._get_data_for_universal_package()
         if self._homepage:
             if not self._description or not self._license_info.content:
                 await self._load_remaining_data()
             return self
-        udd = UDD(
-            self._raw_name,
-            self._db_pools.udd,
-            self._recognition_context.project_directory,
-            udd_lock=self._recognition_context.synchronization.udd_lock
-        )
-        self._homepage = await udd.get_homepage()
-        self._name = udd.get_source_package()
+        await self._fetch_from_udd()
         if not self._name:
-            udd = UDD(
-                self._raw_name,
-                self._db_pools.udd,
-                self._recognition_context.project_directory,
-                udd_lock=self._recognition_context.synchronization.udd_lock,
-                packages_table='archived_packages',
-                sources_table='archived_sources'
-            )
-            self._homepage = await udd.get_homepage()
-            self._name = udd.get_source_package()
-            if not self._name:
-                return self
-        if self._homepage:
-            self._package_url = self._homepage
+            return self
+        self._package_url = self._homepage
         await self._load_remaining_data()
         return self
 
@@ -298,35 +304,47 @@ class UbuntuPackage(DebianBasedPackage):
         self._launchpad_source_base = 'https://launchpad.net/ubuntu/+source/'
 
     async def initialize(self) -> Self:
-        self._homepage = await self.get_data_for_universal_package()
+        self._homepage = await self._get_data_for_universal_package()
         if self._homepage:
             return self
-        udd = UDD(
-            self._raw_name,
-            self._db_pools.udd,
-            self._recognition_context.project_directory,
-            udd_lock=self._recognition_context.synchronization.udd_lock
-        )
-        self._homepage = await udd.get_homepage()
-        self._name = udd.get_source_package()
+        await self._fetch_from_udd()
         if not self._name:
-            udd = UDD(
-                self._raw_name,
-                self._db_pools.udd,
-                self._recognition_context.project_directory,
-                udd_lock=self._recognition_context.synchronization.udd_lock,
-                packages_table='archived_packages',
-                sources_table='archived_sources'
-            )
-            self._homepage = await udd.get_homepage()
-            self._name = udd.get_source_package()
-            if not self._name:
-                return self
+            return self
         self._package_url = self._homepage or self._launchpad_source_base + self._name
         return self
 
 
-class FedoraPackage(LinuxPackage):
+class RpmPackage(LinuxPackage):
+
+    def __init__(
+            self,
+            recognition_context: RecognitionContext,
+            fingerprint: Fingerprint,
+            family: str | None = None
+    ) -> None:
+        super().__init__(recognition_context, fingerprint, family)
+
+    async def initialize(self) -> Self:
+        self._homepage = await self._get_data_for_universal_package()
+        if self._homepage:
+            return self
+        spec_file_url = await self._get_spec_file_url()
+        if not spec_file_url:
+            return self
+        try:
+            response = await self._fetch_text_response(spec_file_url)
+        except ResponseError:
+            return self
+        spec_file_content = response.get_content()
+        await async_to_thread(self._semaphore, self._parse_spec_content, spec_file_content)
+        return self
+
+    @abstractmethod
+    async def _get_spec_file_url(self):
+        pass
+
+
+class FedoraPackage(RpmPackage):
 
     def __init__(
             self,
@@ -346,21 +364,6 @@ class FedoraPackage(LinuxPackage):
         self._src_base_url = 'https://src.fedoraproject.org/'
         self._api_base_url = self._pagure_base_url if self._pagure_origin else self._src_base_url
         self._vendor = 'Red Hat' if self._pagure_origin else 'Fedora'
-
-    async def initialize(self) -> Self:
-        self._homepage = await self.get_data_for_universal_package()
-        if self._homepage:
-            return self
-        spec_file_url = await self._get_spec_file_url()
-        if not spec_file_url:
-            return self
-        try:
-            response = await self._fetch_text_response(spec_file_url)
-        except ResponseError:
-            return self
-        spec_file_content = response.get_content()
-        await async_to_thread(self._semaphore, self._parse_spec_content, spec_file_content)
-        return self
 
     async def _get_spec_file_url(self) -> str:
         list_files_path = self._get_list_files_path(self._raw_name)
@@ -446,7 +449,7 @@ class FedoraPackage(LinuxPackage):
             return f'/api/0/rpms/{package_name}/tree'
 
 
-class OpenSusePackage(LinuxPackage):
+class OpenSusePackage(RpmPackage):
 
     def __init__(
             self,
@@ -459,21 +462,6 @@ class OpenSusePackage(LinuxPackage):
         self._headers = OpenSusePackage._get_headers()
         self._project_name = ''
         self._vendor = 'OpenSuse'
-
-    async def initialize(self) -> Self:
-        self._homepage = await self.get_data_for_universal_package()
-        if self._homepage:
-            return self
-        spec_file_url = await self._get_spec_file_url()
-        if not spec_file_url:
-            return self
-        try:
-            response = await self._fetch_text_response(spec_file_url)
-        except ResponseError:
-            return self
-        spec_file_content = response.get_content()
-        await async_to_thread(self._semaphore, self._parse_spec_content, spec_file_content)
-        return self
 
     async def _get_spec_file_url(self) -> str:
         package_sources_url = await self._get_package_sources_url()
@@ -578,15 +566,14 @@ class AlpinePackage(LinuxPackage):
         self._vendor = 'Alpine Linux'
 
     async def initialize(self, family: str | None = None) -> Self:
-        project_director = self._recognition_context.project_directory
         package_info = await fetch_alpine_package_info(
-            self._db_pools.packages, self._raw_name, project_director
+            self._db_pools.packages, self._jinja_environment, self._raw_name, self._semaphore
         )
         if package_info is None:
             return self
         self._name = fetch(package_info, 'srcname', default=self._raw_name)
         self._description = fetch(package_info, 'description', default='')
-        self._license_info = LicenseInfo([fetch(package_info, 'license', output_type=str)])
+        self._license_info = LicenseInfo([fetch(package_info, 'licenses', output_type=str)])
         if package_info['homepage']:
             self._package_url = self._homepage = package_info['homepage']
         return self
@@ -606,7 +593,7 @@ class ArchPackage(LinuxPackage):
         self._vendor = 'Arch Linux'
 
     async def initialize(self)  -> Self:
-        self._homepage = await self.get_data_for_universal_package()
+        self._homepage = await self._get_data_for_universal_package()
         if self._homepage:
             return self
         matching_packages_info = await self._get_matching_results()
@@ -662,9 +649,13 @@ class UniversalPackage(LinuxPackage):
 
     async def initialize(self) -> Self:
         raw_name = self._raw_name.lower()
-        project_directory = self._recognition_context.project_directory
         package_info = await fetch_package_info(
-            raw_name, self._family, self._db_pools.repology, self._is_host_supported, project_directory
+            raw_name,
+            self._family,
+            self._db_pools.repology,
+            self._jinja_environment,
+            self._is_host_supported,
+            self._semaphore
         )
         if package_info is None:
             return self

@@ -13,7 +13,7 @@ flowchart TD
     E --> F[Recognize Packages]
     F --> G{Is Library Package?}
     G --> |Other| I[Use Distro Class]
-    I -->|Fail| J[Use Universal Lookup]
+    I --> |Fail| J[Use Universal Lookup]
     G --> |library| K[Enrich Via Public Project API]
     J --> K
     K --> L[Resolve Properties]
@@ -100,9 +100,10 @@ linux_recognition_initialize  # creation + rebuild of databases and data downloa
 import asyncio
 
 from linux_recognition.recognition import recognize
+from linux_recognition.typestore.datatypes import FingerprintDict
 
 
-raw_fingerprints = [
+raw_fingerprints: list[FingerprintDict] = [
     {
     'software': 'yast2-ycp-ui-bindings',
     'publisher': 'SUSE LLC <https://www.suse.com/>',
