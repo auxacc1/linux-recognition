@@ -76,7 +76,7 @@ flowchart TD
 
 
 ## Prerequisites
-- Python 3.13+ 
+- Python 3.12+ 
 - PostgreSQL 17+
 - Repology database dump (https://dumps.repology.org/)
 
