@@ -7,9 +7,9 @@ from anyio import Path
 from jinja2 import Environment, FileSystemLoader, Template, TemplateError
 from jinja2.filters import FILTERS
 
-from log_management import get_error_details
-from synchronization import async_to_thread
-from typestore.errors import SQLTemplateError
+from linux_recognition.log_management import get_error_details
+from linux_recognition.synchronization import async_to_thread
+from linux_recognition.typestore.errors import SQLTemplateError
 
 
 logger = getLogger(__name__)

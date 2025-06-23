@@ -11,15 +11,15 @@ from xml.etree.ElementTree import Element
 from bs4 import BeautifulSoup
 from defusedxml.ElementTree import fromstring
 
-from db.postgresql.alpine import fetch_alpine_package_info
-from db.postgresql.repology import fetch_package_info
-from db.postgresql.udd import UDD
-from reposcan.spec import Spec, replace_macros
-from synchronization import async_to_thread
-from typestore.datatypes import LicenseInfo, Fingerprint, PackageTools, Package, RecognitionContext
-from typestore.errors import ResponseError
-from webtools.content import fetch
-from webtools.response import JsonResponse, TextResponse
+from linux_recognition.db.postgresql.alpine import fetch_alpine_package_info
+from linux_recognition.db.postgresql.repology import fetch_package_info
+from linux_recognition.db.postgresql.udd import UDD
+from linux_recognition.reposcan.spec import Spec, replace_macros
+from linux_recognition.synchronization import async_to_thread
+from linux_recognition.typestore.datatypes import LicenseInfo, Fingerprint, PackageTools, Package, RecognitionContext
+from linux_recognition.typestore.errors import ResponseError
+from linux_recognition.webtools.content import fetch
+from linux_recognition.webtools.response import JsonResponse, TextResponse
 
 
 logger = getLogger(__name__)

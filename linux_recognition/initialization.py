@@ -6,20 +6,22 @@ from anyio import Path
 from asyncpg import Pool
 from jinja2 import Environment
 
-from configuration import get_project_directory, initialize_settings, Settings
-from context import managed_context, prepare_context
-from db.postgresql.alpine import create_alpine_packages_table, update_alpine_packages_table
-from db.postgresql.core import create_database
-from db.postgresql.cpe import create_cpe_entities, populate_cpe_entities
-from db.postgresql.licenses import create_licenses_table, populate_licenses_table
-from db.postgresql.output import create_output_table
-from db.postgresql.repology import (
+from linux_recognition.configuration import get_project_directory, initialize_settings, Settings
+from linux_recognition.context import managed_context, prepare_context
+from linux_recognition.db.postgresql.alpine import create_alpine_packages_table, update_alpine_packages_table
+from linux_recognition.db.postgresql.core import create_database
+from linux_recognition.db.postgresql.cpe import create_cpe_entities, populate_cpe_entities
+from linux_recognition.db.postgresql.licenses import create_licenses_table, populate_licenses_table
+from linux_recognition.db.postgresql.output import create_output_table
+from linux_recognition.db.postgresql.repology import (
     rebuild_repology_database, decompress_repology_database_dump, restore_repology_origin_database
 )
-from log_management import get_error_details, init_logging
-from typestore.datatypes import RecognitionContext, SessionHandler
-from typestore.errors import LinuxRecognitionError
-from webtools.download import download_cpe_dictionary, download_repology_database_dump, download_spdx_licenses
+from linux_recognition.log_management import get_error_details, init_logging
+from linux_recognition.typestore.datatypes import RecognitionContext, SessionHandler
+from linux_recognition.typestore.errors import LinuxRecognitionError
+from linux_recognition.webtools.download import (
+    download_cpe_dictionary, download_repology_database_dump, download_spdx_licenses
+)
 
 
 def initialize() -> None:

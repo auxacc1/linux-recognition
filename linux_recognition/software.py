@@ -5,25 +5,25 @@ from typing import Self
 
 from jinja2 import Environment
 
-from context import RecognitionContext
-from data.predefined import PREDEFINED_PROPERTIES
-from db.postgresql.cpe import get_cpe_entities
-from db.postgresql.licenses import fetch_licenses
+from linux_recognition.context import RecognitionContext
+from linux_recognition.data.predefined import PREDEFINED_PROPERTIES
+from linux_recognition.db.postgresql.cpe import get_cpe_entities
+from linux_recognition.db.postgresql.licenses import fetch_licenses
 from log_management import get_error_details
-from normalization import Fingerprint
-from reposcan.packages import (
+from linux_recognition.normalization import Fingerprint
+from linux_recognition.reposcan.packages import (
     correct_url,
     get_package_tools,
     UniversalPackage,
     LinuxPackage,
     get_supported_distros
 )
-from reposcan.projects import MetaCPANProject, PyPIProject, RubyGemProject, url_to_project
-from reposcan.projects_base import Project
-from synchronization import async_to_thread
-from typestore.datatypes import Brand, LicenseInfo, LlmInteraction, PackageTools, SessionHandler
-from typestore.errors import LinuxRecognitionError
-from webtools.response import fetch_html_text
+from linux_recognition.reposcan.projects import MetaCPANProject, PyPIProject, RubyGemProject, url_to_project
+from linux_recognition.reposcan.projects_base import Project
+from linux_recognition.synchronization import async_to_thread
+from linux_recognition.typestore.datatypes import Brand, LicenseInfo, LlmInteraction, PackageTools, SessionHandler
+from linux_recognition.typestore.errors import LinuxRecognitionError
+from linux_recognition.webtools.response import fetch_html_text
 
 
 logger = getLogger(__name__)

@@ -9,10 +9,10 @@ from psycopg import AsyncConnection
 from psycopg.errors import Error
 from psycopg.sql import SQL, Identifier
 
-from configuration import PostgresConfig
-from db.rendering import render
-from log_management import get_error_details
-from typestore.errors import DatabaseError, SQLTemplateError
+from linux_recognition.configuration import PostgresConfig
+from linux_recognition.db.rendering import render
+from linux_recognition.log_management import get_error_details
+from linux_recognition.typestore.errors import DatabaseError, SQLTemplateError
 
 
 logger = getLogger(__name__)

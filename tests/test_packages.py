@@ -1,6 +1,6 @@
 import pytest
 
-from reposcan.packages import (
+from linux_recognition.reposcan.packages import (
     DebianPackage,
     FedoraPackage,
     LinuxPackage,
@@ -9,7 +9,7 @@ from reposcan.packages import (
     ArchPackage,
     UniversalPackage
 )
-from typestore.datatypes import Fingerprint, LicenseInfo, RecognitionContext
+from linux_recognition.typestore.datatypes import Fingerprint, LicenseInfo, RecognitionContext
 
 
 input_samples = {

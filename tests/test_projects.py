@@ -2,11 +2,11 @@ from typing import Any
 
 import pytest
 
-from typestore.datatypes import VersionNormalizationPatterns
-from normalization import FingerprintNormalizer
-from reposcan.projects_base import Project
-from reposcan.projects import get_supported_projects
-from typestore.datatypes import RecognitionContext, Brand, Release
+from linux_recognition.typestore.datatypes import VersionNormalizationPatterns
+from linux_recognition.normalization import FingerprintNormalizer
+from linux_recognition.reposcan.projects_base import Project
+from linux_recognition.reposcan.projects import get_supported_projects
+from linux_recognition.typestore.datatypes import RecognitionContext, Brand, Release
 
 
 input_samples = {

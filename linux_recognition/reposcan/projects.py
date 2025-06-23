@@ -13,11 +13,11 @@ from typing import Any, ClassVar, Self
 from urllib.parse import quote, urljoin, urlparse, ParseResult
 from xml.etree.ElementTree import Element
 
-from log_management import get_error_details
-from reposcan.packages import FedoraPackage, LinuxPackage
-from reposcan.projects_base import GitProject, Project
-from synchronization import async_to_thread
-from typestore.datatypes import (
+from linux_recognition.log_management import get_error_details
+from linux_recognition.reposcan.packages import FedoraPackage, LinuxPackage
+from linux_recognition.reposcan.projects_base import GitProject, Project
+from linux_recognition.synchronization import async_to_thread
+from linux_recognition.typestore.datatypes import (
     Brand,
     Fingerprint,
     GitHubTag,
@@ -33,9 +33,9 @@ from typestore.datatypes import (
     RecognitionContext,
     VersionInfo
 )
-from typestore.errors import ResponseError
-from webtools.content import fetch
-from webtools.response import JsonResponse, TextResponse
+from linux_recognition.typestore.errors import ResponseError
+from linux_recognition.webtools.content import fetch
+from linux_recognition.webtools.response import JsonResponse, TextResponse
 
 
 logger = getLogger(__name__)

@@ -14,11 +14,11 @@ from asyncpg import Pool, Connection, Record
 from jinja2 import Environment
 from zstandard import ZstdDecompressor, ZstdError
 
-from configuration import PostgresConfig
-from db.postgresql.core import query_db
-from log_management import get_error_details
-from synchronization import async_to_thread
-from typestore.errors import DatabaseError, SQLTemplateError
+from linux_recognition.configuration import PostgresConfig
+from linux_recognition.db.postgresql.core import query_db
+from linux_recognition.log_management import get_error_details
+from linux_recognition.synchronization import async_to_thread
+from linux_recognition.typestore.errors import DatabaseError, SQLTemplateError
 
 
 logger = getLogger(__name__)

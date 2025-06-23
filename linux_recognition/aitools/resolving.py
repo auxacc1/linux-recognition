@@ -10,10 +10,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field
 
-from db.postgresql.licenses import fetch_identifiers, fetch_licenses, insert_licenses
-from log_management import get_error_details
-from typestore.datatypes import LicenseIdentifiers
-from typestore.errors import DatabaseError, LLMError, SQLTemplateError
+from linux_recognition.db.postgresql.licenses import fetch_identifiers, fetch_licenses, insert_licenses
+from linux_recognition.log_management import get_error_details
+from linux_recognition.typestore.datatypes import LicenseIdentifiers
+from linux_recognition.typestore.errors import DatabaseError, LLMError, SQLTemplateError
 
 
 logger = getLogger(__name__)

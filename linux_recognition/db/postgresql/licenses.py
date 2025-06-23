@@ -6,10 +6,10 @@ from anyio import Path
 from asyncpg import Connection, Pool, Record
 from jinja2 import Environment
 
-from db.postgresql.core import query_db
-from log_management import get_error_details
-from typestore.datatypes import LicenseItem
-from typestore.errors import DatabaseError, SQLTemplateError
+from linux_recognition.db.postgresql.core import query_db
+from linux_recognition.log_management import get_error_details
+from linux_recognition.typestore.datatypes import LicenseItem
+from linux_recognition.typestore.errors import DatabaseError, SQLTemplateError
 
 
 logger = getLogger(__name__)

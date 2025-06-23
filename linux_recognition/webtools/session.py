@@ -3,7 +3,7 @@ from os import getenv
 
 from aiohttp import ClientSession, ClientError
 
-from log_management import get_error_details
+from linux_recognition.log_management import get_error_details
 
 
 logger = getLogger(__name__)

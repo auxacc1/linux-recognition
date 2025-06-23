@@ -4,8 +4,8 @@ from logging import getLogger
 from asyncpg import Connection, Pool, Record
 from jinja2 import Environment
 
-from db.postgresql.core import query_db
-from typestore.errors import DatabaseError, SQLTemplateError
+from linux_recognition.db.postgresql.core import query_db
+from linux_recognition.typestore.errors import DatabaseError, SQLTemplateError
 
 
 logger = getLogger(__name__)

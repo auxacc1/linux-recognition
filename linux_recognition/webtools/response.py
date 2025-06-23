@@ -11,11 +11,11 @@ from bs4 import BeautifulSoup
 from html2text import HTML2Text
 from yarl import URL
 
-from log_management import get_error_details
-from synchronization import async_to_thread
-from typestore.datatypes import HTMLParse, SessionHandler
-from typestore.errors import ResponseError
-from webtools.session import get_headers
+from linux_recognition.log_management import get_error_details
+from linux_recognition.synchronization import async_to_thread
+from linux_recognition.typestore.datatypes import HTMLParse, SessionHandler
+from linux_recognition.typestore.errors import ResponseError
+from linux_recognition.webtools.session import get_headers
 
 
 logger = getLogger(__name__)

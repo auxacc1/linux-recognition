@@ -19,7 +19,15 @@ class PostgresConfig(BaseModel):
     host: str
     port: str
 
-    model_config = ConfigDict(frozen=True, coerce_numbers_to_str=True, hide_input_in_errors=True)
+    model_config = ConfigDict(frozen=True, hide_input_in_errors=True)
+
+    # noinspection PyNestedDecorators
+    @field_validator('port', mode='before')
+    @classmethod
+    def ensure_range(cls, value: int) -> str:
+        if not isinstance(value, int) or not 1 <= value <= 65535:
+            raise ValueError('The value must be an integer between 1 and 65535.')
+        return str(value)
 
     def for_database(self, database_name: str) -> Self:
         return self.model_copy(update={'dbname': database_name})

@@ -3,21 +3,21 @@ from itertools import batched
 from logging import DEBUG, Logger
 from uuid import uuid4
 
-from configuration import get_project_directory, initialize_settings
-from context import managed_context, prepare_context
-from db.postgresql.output import filter_recognized_fingerprints, update_recognized_table
-from log_management import get_error_details, init_logging
-from normalization import normalize_fingerprints
-from initialization import is_initialized
-from software import SoftwareRecognizer
-from typestore.datatypes import (
+from linux_recognition.configuration import get_project_directory, initialize_settings
+from linux_recognition.context import managed_context, prepare_context
+from linux_recognition.db.postgresql.output import filter_recognized_fingerprints, update_recognized_table
+from linux_recognition.log_management import get_error_details, init_logging
+from linux_recognition.normalization import normalize_fingerprints
+from linux_recognition.initialization import is_initialized
+from linux_recognition.software import SoftwareRecognizer
+from linux_recognition.typestore.datatypes import (
     Fingerprint,
     FingerprintDict,
     VersionNormalizationPatterns,
     RecognitionContext,
     RecognitionResult
 )
-from typestore.errors import DatabaseError, ProjectNotInitializedError, SQLTemplateError
+from linux_recognition.typestore.errors import DatabaseError, ProjectNotInitializedError, SQLTemplateError
 
 
 async def recognize(raw_fingerprints: list[FingerprintDict], segment_length: int = 20) -> None:

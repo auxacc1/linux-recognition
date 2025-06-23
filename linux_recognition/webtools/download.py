@@ -5,10 +5,10 @@ from uuid import uuid4
 
 import aiofile
 
-from log_management import get_error_details
-from typestore.datatypes import SessionHandler
-from typestore.errors import DataDependencyError, ResponseError
-from webtools.response import BinaryResponse
+from linux_recognition.log_management import get_error_details
+from linux_recognition.typestore.datatypes import SessionHandler
+from linux_recognition.typestore.errors import DataDependencyError, ResponseError
+from linux_recognition.webtools.response import BinaryResponse
 
 
 logger = getLogger(__name__)

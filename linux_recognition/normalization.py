@@ -1,7 +1,7 @@
 import re
 
-from reposcan.dateparse import parse_date_from_digits
-from typestore.datatypes import Fingerprint, FingerprintDict, VersionNormalizationPatterns
+from linux_recognition.reposcan.dateparse import parse_date_from_digits
+from linux_recognition.typestore.datatypes import Fingerprint, FingerprintDict, VersionNormalizationPatterns
 
 
 class FingerprintNormalizer:

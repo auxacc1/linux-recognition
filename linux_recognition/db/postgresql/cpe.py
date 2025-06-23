@@ -10,9 +10,9 @@ from asyncpg import Pool, Connection, Record
 from defusedxml.ElementTree import iterparse
 from jinja2 import Environment
 
-from db.postgresql.core import query_db
-from log_management import get_error_details
-from typestore.errors import DataDependencyError
+from linux_recognition.db.postgresql.core import query_db
+from linux_recognition.log_management import get_error_details
+from linux_recognition.typestore.errors import DataDependencyError
 
 
 logger = getLogger(__name__)

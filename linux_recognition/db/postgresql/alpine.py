@@ -12,12 +12,12 @@ from anyio import Path
 from asyncpg import Connection, Pool, Record
 from jinja2 import Environment
 
-from db.postgresql.core import query_db
-from log_management import get_error_details
-from synchronization import async_to_thread
-from typestore.datatypes import AlpinePackageTuple, SessionHandler
-from typestore.errors import DatabaseError, SQLTemplateError
-from webtools.download import download_apkindex_files
+from linux_recognition.db.postgresql.core import query_db
+from linux_recognition.log_management import get_error_details
+from linux_recognition.synchronization import async_to_thread
+from linux_recognition.typestore.datatypes import AlpinePackageTuple, SessionHandler
+from linux_recognition.typestore.errors import DatabaseError, SQLTemplateError
+from linux_recognition.webtools.download import download_apkindex_files
 
 
 logger = getLogger(__name__)

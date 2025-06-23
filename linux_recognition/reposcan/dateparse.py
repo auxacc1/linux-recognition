@@ -3,7 +3,7 @@ from calendar import month_name, month_abbr, monthrange
 from functools import reduce
 from itertools import permutations, repeat
 
-from typestore.datatypes import (
+from linux_recognition.typestore.datatypes import (
     Date,
     DateLikeParse,
     DatePatterns,

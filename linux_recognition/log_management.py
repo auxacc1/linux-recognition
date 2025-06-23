@@ -9,7 +9,7 @@ from typing import Any, Self
 import json_log_formatter
 from anyio import Path
 
-from configuration import LoggingSettings
+from linux_recognition.configuration import LoggingSettings
 
 
 class CustomizedJSONFormatter(json_log_formatter.JSONFormatter):

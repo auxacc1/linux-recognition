@@ -3,10 +3,10 @@ from logging import getLogger
 import pytest
 from pytest_asyncio import is_async_test
 
-from configuration import get_project_directory, initialize_settings
-from context import managed_context, prepare_context
-from initialization import is_initialized
-from typestore.errors import ProjectNotInitializedError
+from linux_recognition.configuration import get_project_directory, initialize_settings
+from linux_recognition.context import managed_context, prepare_context
+from linux_recognition.initialization import is_initialized
+from linux_recognition.typestore.errors import ProjectNotInitializedError
 
 
 logger = getLogger(__name__)

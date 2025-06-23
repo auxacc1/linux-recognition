@@ -10,10 +10,10 @@ from xml.etree.ElementTree import Element
 
 from defusedxml.ElementTree import fromstring
 
-from normalization import Fingerprint
-from reposcan.dateparse import extract_date_like, parse_date
-from reposcan.packages import LinuxPackage
-from typestore.datatypes import (
+from linux_recognition.normalization import Fingerprint
+from linux_recognition.reposcan.dateparse import extract_date_like, parse_date
+from linux_recognition.reposcan.packages import LinuxPackage
+from linux_recognition.typestore.datatypes import (
     Brand,
     ChangelogItem,
     Date,
@@ -32,9 +32,9 @@ from typestore.datatypes import (
     VersionInfo,
     VersionPattern
 )
-from typestore.errors import ResponseError
-from webtools.content import fetch
-from webtools.response import JsonResponse, TextResponse
+from linux_recognition.typestore.errors import ResponseError
+from linux_recognition.webtools.content import fetch
+from linux_recognition.webtools.response import JsonResponse, TextResponse
 
 
 logger = getLogger(__name__)

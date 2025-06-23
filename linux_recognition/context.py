@@ -5,14 +5,14 @@ from pathlib import Path
 
 from aiohttp import ClientError
 
-from aitools.resolving import ChatInteraction, FaissLicenseResolver
-from configuration import DatabaseSettings, Settings
-from db.postgresql.core import init_pool, Pool
-from db.rendering import create_jinja_environment
-from log_management import get_error_details
-from reposcan.dateparse import generate_complete_date_patterns, generate_no_year_patterns
-from reposcan.projects import is_host_supported
-from typestore.datatypes import (
+from linux_recognition.aitools.resolving import ChatInteraction, FaissLicenseResolver
+from linux_recognition.configuration import DatabaseSettings, Settings
+from linux_recognition.db.postgresql.core import init_pool, Pool
+from linux_recognition.db.rendering import create_jinja_environment
+from linux_recognition.log_management import get_error_details
+from linux_recognition.reposcan.dateparse import generate_complete_date_patterns, generate_no_year_patterns
+from linux_recognition.reposcan.projects import is_host_supported
+from linux_recognition.typestore.datatypes import (
     DatePatterns,
     DbPools,
     LibraryPatterns,
@@ -20,8 +20,8 @@ from typestore.datatypes import (
     SourceDbPools,
     SynchronizationPrimitives
 )
-from typestore.errors import ContextPreparationError, DatabaseError, LLMError, SQLTemplateError
-from webtools.session import SessionManager
+from linux_recognition.typestore.errors import ContextPreparationError, DatabaseError, LLMError, SQLTemplateError
+from linux_recognition.webtools.session import SessionManager
 
 
 logger = getLogger(__name__)
@@ -117,42 +117,3 @@ async def _close_pools(pools: list[Pool]) -> None:
     for pool in pools:
         if isinstance(pool, Pool):
             await pool.close()
-
-#
-# import asyncio
-# from asyncpg import Connection
-# from configuration import initialize_settings, get_project_directory
-# from db.postgresql.core import create_database
-# from db.postgresql.repology import _set_search_path
-# from log_management import init_logging
-#
-# async def chuj():
-#     project_directory = await get_project_directory()
-#     settings = initialize_settings(project_directory)
-#     logger, listener = init_logging(settings.logging, project_directory)
-#     with listener.started():
-#         context = await prepare_context(
-#             project_directory, settings, create_licenses_vectorstore=False
-#         )
-#         async with managed_context(context) as recognition_context:
-#             pool = recognition_context.source_db_pools.repology
-#             environment = recognition_context.jinja_environment
-#             semaphore = recognition_context.synchronization.semaphore
-#
-#             dbname = 'dupa_database'
-#             postgres_config = settings.database.postgres_default.for_database(dbname)
-#             await create_database(postgres_config)
-#             dupa_pool = await init_pool(postgres_config)
-#             query = 'CREATE SCHEMA \"pizda\"'
-#
-#             async def query_fn(connection: Connection, query: str) -> str:
-#                 return await connection.execute(query)
-#
-#             async with dupa_pool.acquire() as connection:
-#                 await query_fn(connection, query)
-#             await _set_search_path(dupa_pool, environment, semaphore, schemas=['public', 'pizda'])
-#             async with dupa_pool.acquire() as connection:
-#                 query_drop = 'DROP SCHEMA \"pizda\"'
-#                 await query_fn(connection, query_drop)
-#             await dupa_pool.close()
-#

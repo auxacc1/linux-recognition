@@ -4,9 +4,9 @@ import pytest
 from anyio import Path
 from asyncpg import Pool
 
-from configuration import get_project_directory, initialize_settings
-from context import managed_context, prepare_context
-from typestore.datatypes import (
+from linux_recognition.configuration import get_project_directory, initialize_settings
+from linux_recognition.context import managed_context, prepare_context
+from linux_recognition.typestore.datatypes import (
     DatePatterns,
     LibraryPatterns,
     LicenseResolver,
